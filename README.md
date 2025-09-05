@@ -72,6 +72,7 @@ Real-time display of device and playback status:
 
 ### **Tested & Verified**
 - **YAS-209** - Soundbar with wireless subwoofer (Development & Testing Platform)
+- **RX-A8A** - AVENTAGE 11.2-channel AV receiver (Real device testing)
 - **SR-B20A** - Compact soundbar with Alexa
 - **YAS-408** - Front surround soundbar
 
@@ -99,7 +100,10 @@ This integration should work with **any Yamaha device supporting MusicCast**, in
 5. Click **Upload** and select the downloaded `.tar.gz` file
 
 ### Option 2: Docker (Advanced Users)
-For users running Docker environments or custom setups:
+
+The integration is available as a pre-built Docker image from GitHub Container Registry:
+
+**Image**: `ghcr.io/mase1981/uc-intg-musiccast:latest`
 
 **Docker Compose:**
 ```yaml
@@ -139,6 +143,17 @@ docker run -d --restart=unless-stopped --net=host \
   -e UC_DISABLE_MDNS_PUBLISH=false \
   --name uc-intg-yamaha-musiccast \
   ghcr.io/mase1981/uc-intg-musiccast:latest
+```
+
+**Specific Version:**
+```bash
+# Replace v1.0.1 with desired version
+docker pull ghcr.io/mase1981/uc-intg-musiccast:v1.0.1
+docker run -d --restart=unless-stopped --net=host \
+  -v $(pwd)/data:/data \
+  -e UC_CONFIG_HOME=/data \
+  --name uc-intg-yamaha-musiccast \
+  ghcr.io/mase1981/uc-intg-musiccast:v1.0.1
 ```
 
 ### Option 3: Development Simulator
@@ -447,7 +462,7 @@ Automated quality assurance:
 #### **CI/CD Pipeline**
 Automated building and deployment:
 - **Multi-Architecture**: Builds for amd64 and arm64
-- **Docker Images**: Automated Docker Hub publishing
+- **Docker Images**: Automated GitHub Container Registry publishing
 - **Release Artifacts**: Automatic tar.gz generation
 - **Version Management**: Semantic versioning with git tags
 
@@ -504,7 +519,7 @@ Advanced state management between entities:
 | Device Type | Example Models | Status | Features |
 |-------------|----------------|---------|-----------|
 | Soundbars | YAS-209, YAS-408, SR-B20A | ✅ Tested | Full control, source switching |
-| AV Receivers | RX-V6A, RX-A2A, TSR-700 | ✅ Compatible | Full control, multi-input |
+| AV Receivers | RX-V6A, RX-A8A, TSR-700 | ✅ Tested | Full control, multi-input, sound programs |
 | Wireless Speakers | MusicCast 20/50 | ✅ Compatible | Playback control, limited sources |
 | Streaming Amps | WXA-50, R-N803D | ✅ Compatible | Full control, streaming sources |
 | Piano/Keyboard | Clavinova CLP series | ✅ Compatible | Basic playback if MusicCast enabled |
