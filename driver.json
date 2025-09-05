@@ -5,6 +5,7 @@
   "name": {
     "en": "Yamaha MusicCast"
   },
+  "icon": "uc:music",
   "description": {
     "en": "Integration for Yamaha MusicCast audio devices supporting playback control, volume management, and multi-zone audio streaming."
   },

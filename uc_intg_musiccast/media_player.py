@@ -32,7 +32,7 @@ class YamahaMusicCastMediaPlayer(MediaPlayer):
             name=device_name,
             features=features,
             attributes=attributes,
-            device_class=DeviceClasses.SPEAKER,
+            device_class=DeviceClasses.RECEIVER,  # Changed to RECEIVER for AVR devices
             cmd_handler=self._handle_command,
         )
 
@@ -40,6 +40,8 @@ class YamahaMusicCastMediaPlayer(MediaPlayer):
         self._zone: str = "main"
         self._integration_api = None
         self._available_sources = []
+        self._available_sound_programs = []
+        self._device_capabilities = {}
 
     def set_client(self, client):
         """Set the MusicCast API client."""
@@ -53,7 +55,8 @@ class YamahaMusicCastMediaPlayer(MediaPlayer):
             Features.VOLUME_UP_DOWN, Features.MUTE_TOGGLE, Features.MEDIA_TITLE,
             Features.MEDIA_ARTIST, Features.MEDIA_ALBUM, Features.MEDIA_IMAGE_URL,
             Features.MEDIA_DURATION, Features.MEDIA_POSITION,
-            Features.REPEAT, Features.SHUFFLE, Features.SELECT_SOURCE  # Added source selection
+            Features.REPEAT, Features.SHUFFLE, Features.SELECT_SOURCE,
+            Features.SELECT_SOUND_MODE  # Added sound mode selection
         ]
 
     def _build_initial_attributes(self) -> dict:
@@ -62,60 +65,82 @@ class YamahaMusicCastMediaPlayer(MediaPlayer):
             Attributes.STATE: States.STANDBY,
             Attributes.VOLUME: 0,
             Attributes.MUTED: False,
-            Attributes.SOURCE_LIST: [],  # Will be populated after connecting
-            Attributes.SOURCE: "",       # Current source
+            Attributes.SOURCE_LIST: [],
+            Attributes.SOURCE: "",
+            Attributes.SOUND_MODE_LIST: [],  # Added sound modes
+            Attributes.SOUND_MODE: "",       # Current sound mode
         }
 
     async def initialize_sources(self):
-        """Initialize available sources from device features."""
+        """Initialize available sources and capabilities from device."""
         if not self._client:
             return
 
         try:
+            # Get device capabilities
             features = await self._client.get_features()
-            zone_info = features.get("zone", [])
+            self._device_capabilities = features
             
-            if zone_info:
-                # Get input list from main zone
-                main_zone = next((z for z in zone_info if z.get("id") == "main"), None)
-                if main_zone:
-                    input_list = main_zone.get("input_list", [])
-                    
-                    # Map technical input names to friendly names
-                    source_mapping = {
-                        "hdmi": "HDMI",
-                        "analog": "Analog",
-                        "bluetooth": "Bluetooth", 
-                        "spotify": "Spotify",
-                        "airplay": "AirPlay",
-                        "usb": "USB",
-                        "optical": "Optical",
-                        "coaxial": "Coaxial",
-                        "aux": "AUX"
-                    }
-                    
-                    self._available_sources = []
-                    for input_id in input_list:
-                        friendly_name = source_mapping.get(input_id, input_id.title())
-                        self._available_sources.append({
-                            "id": input_id,
-                            "name": friendly_name
-                        })
-                    
-                    # Update source list attribute
-                    source_names = [src["name"] for src in self._available_sources]
-                    self.attributes[Attributes.SOURCE_LIST] = source_names
-                    
-                    _LOG.info(f"Initialized {len(self._available_sources)} sources: {source_names}")
+            # Get available inputs
+            available_inputs = await self._client.get_available_inputs(self._zone)
+            self._available_sources = available_inputs
+            
+            # Update source list attribute
+            source_names = [src["name"] for src in self._available_sources]
+            self.attributes[Attributes.SOURCE_LIST] = source_names
+            
+            # Get available sound programs
+            sound_programs = await self._client.get_available_sound_programs(self._zone)
+            self._available_sound_programs = sound_programs
+            
+            # Create friendly sound mode names
+            sound_mode_mapping = {
+                "munich": "Munich Hall",
+                "vienna": "Vienna Hall",
+                "amsterdam": "Amsterdam Concert Hall",
+                "freiburg": "Freiburg Cathedral",
+                "royaumont": "Royaumont Abbey",
+                "chamber": "Chamber Music",
+                "village_vanguard": "Village Vanguard Jazz Club",
+                "warehouse_loft": "Warehouse Loft",
+                "cellar_club": "Cellar Club",
+                "roxy_theatre": "Roxy Theatre",
+                "bottom_line": "Bottom Line",
+                "sports": "Sports",
+                "action_game": "Action Game",
+                "roleplaying_game": "RPG Game",
+                "music_video": "Music Video",
+                "recital_opera": "Recital/Opera",
+                "standard": "Standard",
+                "spectacle": "Spectacle",
+                "sci-fi": "Sci-Fi",
+                "adventure": "Adventure",
+                "drama": "Drama",
+                "mono_movie": "Mono Movie",
+                "enhanced": "Enhanced",
+                "2ch_stereo": "2-Channel Stereo",
+                "all_ch_stereo": "All Channel Stereo",
+                "surr_decoder": "Surround Decoder",
+                "straight": "Straight"
+            }
+            
+            # Update sound mode list
+            sound_mode_names = []
+            for program in sound_programs:
+                friendly_name = sound_mode_mapping.get(program, program.replace("_", " ").title())
+                sound_mode_names.append(friendly_name)
+            
+            self.attributes[Attributes.SOUND_MODE_LIST] = sound_mode_names
+            
+            _LOG.info(f"Initialized {len(self._available_sources)} sources and {len(sound_programs)} sound programs")
             
         except Exception as e:
-            _LOG.error(f"Failed to initialize sources: {e}")
-            # Fallback to common sources
+            _LOG.error(f"Failed to initialize capabilities: {e}")
+            # Fallback to basic setup
             self._available_sources = [
-                {"id": "spotify", "name": "Spotify"},
-                {"id": "bluetooth", "name": "Bluetooth"},
-                {"id": "hdmi", "name": "HDMI"},
-                {"id": "analog", "name": "Analog"}
+                {"id": "spotify", "name": "Spotify", "distribution_enable": True, "play_info_type": "netusb"},
+                {"id": "bluetooth", "name": "Bluetooth", "distribution_enable": True, "play_info_type": "netusb"},
+                {"id": "hdmi1", "name": "HDMI 1", "distribution_enable": True, "play_info_type": "none"}
             ]
             self.attributes[Attributes.SOURCE_LIST] = [src["name"] for src in self._available_sources]
 
@@ -139,16 +164,34 @@ class YamahaMusicCastMediaPlayer(MediaPlayer):
                     new_state = States.ON
 
             self.attributes[Attributes.STATE] = new_state
-            self.attributes[Attributes.VOLUME] = status.volume
+            
+            # FIXED: Volume handling with correct range
+            self.attributes[Attributes.VOLUME] = self._convert_volume_to_percentage(
+                status.volume, status.max_volume
+            )
             self.attributes[Attributes.MUTED] = status.mute
 
             # Update current source
             current_input = status.input
             current_source = next(
                 (src["name"] for src in self._available_sources if src["id"] == current_input),
-                current_input.title()
+                status.input_text or current_input.replace("_", " ").title()
             )
             self.attributes[Attributes.SOURCE] = current_source
+
+            # Update current sound mode
+            current_program = status.sound_program
+            if current_program and self._available_sound_programs:
+                # Find friendly name for current sound program
+                sound_mode_mapping = {
+                    "munich": "Munich Hall", "vienna": "Vienna Hall", "amsterdam": "Amsterdam Concert Hall",
+                    "2ch_stereo": "2-Channel Stereo", "all_ch_stereo": "All Channel Stereo",
+                    "straight": "Straight", "standard": "Standard"
+                }
+                current_sound_mode = sound_mode_mapping.get(
+                    current_program, current_program.replace("_", " ").title()
+                )
+                self.attributes[Attributes.SOUND_MODE] = current_sound_mode
 
             # Update media info
             if new_state in [States.PLAYING, States.PAUSED]:
@@ -173,6 +216,16 @@ class YamahaMusicCastMediaPlayer(MediaPlayer):
             _LOG.error(f"Failed to update state: {e}")
             self.attributes[Attributes.STATE] = States.UNAVAILABLE
             self._force_integration_update()
+
+    def _convert_volume_to_percentage(self, volume: int, max_volume: int) -> int:
+        """Convert device volume to percentage (0-100)."""
+        if max_volume <= 0:
+            return 0
+        return min(100, max(0, int((volume / max_volume) * 100)))
+
+    def _convert_percentage_to_volume(self, percentage: int, max_volume: int) -> int:
+        """Convert percentage (0-100) to device volume."""
+        return min(max_volume, max(0, int((percentage / 100) * max_volume)))
 
     def _force_integration_update(self):
         """Force update to integration API."""
@@ -205,7 +258,11 @@ class YamahaMusicCastMediaPlayer(MediaPlayer):
             elif cmd_id == Commands.PREVIOUS:
                 await self._client.set_playback("previous")
             elif cmd_id == Commands.VOLUME and params and 'volume' in params:
-                await self._client.set_volume(self._zone, volume=params['volume'])
+                # FIXED: Convert percentage to device volume
+                percentage = params['volume']
+                status = await self._client.get_status(self._zone)
+                device_volume = self._convert_percentage_to_volume(percentage, status.max_volume)
+                await self._client.set_volume(self._zone, volume=device_volume)
             elif cmd_id == Commands.VOLUME_UP:
                 await self._client.set_volume(self._zone, step=1)
             elif cmd_id == Commands.VOLUME_DOWN:
@@ -233,6 +290,37 @@ class YamahaMusicCastMediaPlayer(MediaPlayer):
                     _LOG.info(f"Switched to source: {source_name} ({source_id})")
                 else:
                     _LOG.error(f"Unknown source: {source_name}")
+                    return ucapi.StatusCodes.BAD_REQUEST
+            elif cmd_id == Commands.SELECT_SOUND_MODE and params and 'sound_mode' in params:
+                # Handle sound mode selection
+                sound_mode_name = params['sound_mode']
+                
+                # Reverse lookup friendly name to technical name
+                sound_mode_reverse_mapping = {
+                    "Munich Hall": "munich", "Vienna Hall": "vienna", "Amsterdam Concert Hall": "amsterdam",
+                    "2-Channel Stereo": "2ch_stereo", "All Channel Stereo": "all_ch_stereo",
+                    "Straight": "straight", "Standard": "standard", "Sports": "sports",
+                    "Action Game": "action_game", "RPG Game": "roleplaying_game"
+                }
+                
+                # First try reverse mapping, then direct match, then lowercase with underscores
+                program_id = sound_mode_reverse_mapping.get(sound_mode_name)
+                if not program_id:
+                    # Try direct match in available programs
+                    program_id = next(
+                        (prog for prog in self._available_sound_programs 
+                         if prog.replace("_", " ").title() == sound_mode_name),
+                        None
+                    )
+                if not program_id:
+                    # Try lowercase with underscores
+                    program_id = sound_mode_name.lower().replace(" ", "_")
+                
+                if program_id and program_id in self._available_sound_programs:
+                    await self._client.set_sound_program(self._zone, program_id)
+                    _LOG.info(f"Switched to sound mode: {sound_mode_name} ({program_id})")
+                else:
+                    _LOG.error(f"Unknown sound mode: {sound_mode_name}")
                     return ucapi.StatusCodes.BAD_REQUEST
             else:
                 _LOG.warning(f"Unhandled command: {cmd_id}")

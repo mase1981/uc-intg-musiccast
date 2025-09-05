@@ -33,8 +33,8 @@ class DeviceInfo:
         return cls(
             device_id=data.get("device_id", ""),
             model_name=data.get("model_name", "Unknown"),
-            system_version=data.get("system_version", ""),
-            api_version=data.get("api_version", ""),
+            system_version=str(data.get("system_version", "")),
+            api_version=str(data.get("api_version", "")),
             ip_address=ip_address,
             friendly_name=data.get("model_name", "Yamaha MusicCast")
         )
@@ -46,11 +46,22 @@ class DeviceStatus:
     
     power: str = "standby"
     volume: int = 0
-    max_volume: int = 100
+    max_volume: int = 161
     mute: bool = False
     input: str = ""
+    input_text: str = ""
     sound_program: str = ""
     sleep: int = 0
+    tone_control: Dict[str, Any] = None
+    dialogue_level: int = 0
+    subwoofer_volume: int = 0
+    actual_volume: Dict[str, Any] = None
+    
+    def __post_init__(self):
+        if self.tone_control is None:
+            self.tone_control = {"mode": "manual", "bass": 0, "treble": 0}
+        if self.actual_volume is None:
+            self.actual_volume = {"mode": "db", "value": -80.0, "unit": "dB"}
     
     @classmethod
     def from_api_response(cls, data: Dict[str, Any]) -> "DeviceStatus":
@@ -58,11 +69,16 @@ class DeviceStatus:
         return cls(
             power=data.get("power", "standby"),
             volume=int(data.get("volume", 0)),
-            max_volume=int(data.get("max_volume", 100)),
+            max_volume=int(data.get("max_volume", 161)),
             mute=bool(data.get("mute", False)),
             input=data.get("input", ""),
+            input_text=data.get("input_text", ""),
             sound_program=data.get("sound_program", ""),
-            sleep=int(data.get("sleep", 0))
+            sleep=int(data.get("sleep", 0)),
+            tone_control=data.get("tone_control", {"mode": "manual", "bass": 0, "treble": 0}),
+            dialogue_level=int(data.get("dialogue_level", 0)),
+            subwoofer_volume=int(data.get("subwoofer_volume", 0)),
+            actual_volume=data.get("actual_volume", {"mode": "db", "value": -80.0, "unit": "dB"})
         )
 
 
@@ -125,6 +141,7 @@ class YamahaMusicCastClient:
         self.base_url = f"http://{ip_address}"
         self.api_base = f"{self.base_url}/YamahaExtendedControl/v1"
         self._session: Optional[aiohttp.ClientSession] = None
+        self._device_capabilities: Optional[Dict[str, Any]] = None
         _LOG.debug(f"Initialized Yamaha client for {ip_address}")
     
     async def __aenter__(self):
@@ -191,7 +208,9 @@ class YamahaMusicCastClient:
     
     async def get_features(self) -> Dict[str, Any]:
         """Get device features and capabilities."""
-        return await self._make_request("system/getFeatures")
+        if self._device_capabilities is None:
+            self._device_capabilities = await self._make_request("system/getFeatures")
+        return self._device_capabilities
 
     async def get_status(self, zone: str = "main") -> DeviceStatus:
         """Get zone status."""
@@ -208,7 +227,20 @@ class YamahaMusicCastClient:
         """Set volume level or step."""
         params = {}
         if volume is not None:
-            params["volume"] = max(0, min(100, volume))
+            features = await self.get_features()
+            max_vol = 161  # Default for receivers
+            
+            if "zone" in features:
+                for zone_info in features["zone"]:
+                    if zone_info.get("id") == zone:
+                        range_steps = zone_info.get("range_step", [])
+                        for range_step in range_steps:
+                            if range_step.get("id") == "volume":
+                                max_vol = range_step.get("max", 161)
+                                break
+                        break
+            
+            params["volume"] = max(0, min(max_vol, volume))
         elif step is not None:
             params["step"] = step
         else:
@@ -224,6 +256,22 @@ class YamahaMusicCastClient:
     async def set_input(self, zone: str = "main", input_source: str = "") -> bool:
         """Set input source."""
         await self._make_request(f"{zone}/setInput", {"input": input_source})
+        return True
+
+    async def set_sound_program(self, zone: str = "main", program: str = "") -> bool:
+        """Set sound program."""
+        await self._make_request(f"{zone}/setSoundProgram", {"program": program})
+        return True
+    
+    async def set_tone_control(self, zone: str = "main", mode: str = "manual", 
+                              bass: Optional[int] = None, treble: Optional[int] = None) -> bool:
+        """Set tone control."""
+        params = {"mode": mode}
+        if bass is not None:
+            params["bass"] = max(-12, min(12, bass))
+        if treble is not None:
+            params["treble"] = max(-12, min(12, treble))
+        await self._make_request(f"{zone}/setToneControl", params)
         return True
 
     async def get_play_info(self) -> PlayInfo:
@@ -265,6 +313,73 @@ class YamahaMusicCastClient:
             raise InvalidParameterError(f"Invalid shuffle mode: {shuffle}")
         await self._make_request("netusb/setShuffle", {"shuffle": shuffle})
         return True
+
+    async def get_available_inputs(self, zone: str = "main") -> List[Dict[str, str]]:
+        """Get available inputs for a zone from device capabilities."""
+        try:
+            features = await self.get_features()
+            
+            # Get system input list with metadata
+            system_inputs = {inp["id"]: inp for inp in features.get("system", {}).get("input_list", [])}
+            
+            # Get zone-specific input list
+            zone_inputs = []
+            for zone_info in features.get("zone", []):
+                if zone_info.get("id") == zone:
+                    zone_inputs = zone_info.get("input_list", [])
+                    break
+            
+            # Build enhanced input list
+            enhanced_inputs = []
+            input_name_mapping = {
+                "hdmi1": "HDMI 1", "hdmi2": "HDMI 2", "hdmi3": "HDMI 3", 
+                "hdmi4": "HDMI 4", "hdmi5": "HDMI 5", "hdmi6": "HDMI 6", "hdmi7": "HDMI 7",
+                "av1": "AV 1", "av2": "AV 2", "av3": "AV 3",
+                "audio1": "Audio 1", "audio2": "Audio 2", "audio3": "Audio 3", "audio4": "Audio 4",
+                "bluetooth": "Bluetooth", "spotify": "Spotify", "airplay": "AirPlay",
+                "usb": "USB", "tuner": "Tuner", "net_radio": "Net Radio", "phono": "Phono",
+                "napster": "Napster", "qobuz": "Qobuz", "tidal": "Tidal", "deezer": "Deezer",
+                "amazon_music": "Amazon Music", "alexa": "Alexa", "server": "Server",
+                "mc_link": "MusicCast Link", "main_sync": "Main Sync", "tv": "TV"
+            }
+            
+            for input_id in zone_inputs:
+                input_info = system_inputs.get(input_id, {})
+                friendly_name = input_name_mapping.get(input_id, input_id.replace("_", " ").title())
+                
+                enhanced_inputs.append({
+                    "id": input_id,
+                    "name": friendly_name,
+                    "distribution_enable": input_info.get("distribution_enable", False),
+                    "play_info_type": input_info.get("play_info_type", "none")
+                })
+            
+            _LOG.info(f"Found {len(enhanced_inputs)} inputs for zone {zone}")
+            return enhanced_inputs
+            
+        except Exception as e:
+            _LOG.error(f"Failed to get available inputs: {e}")
+            # Fallback to basic inputs
+            return [
+                {"id": "spotify", "name": "Spotify", "distribution_enable": True, "play_info_type": "netusb"},
+                {"id": "bluetooth", "name": "Bluetooth", "distribution_enable": True, "play_info_type": "netusb"},
+                {"id": "hdmi1", "name": "HDMI 1", "distribution_enable": True, "play_info_type": "none"},
+                {"id": "audio1", "name": "Audio 1", "distribution_enable": True, "play_info_type": "none"}
+            ]
+
+    async def get_available_sound_programs(self, zone: str = "main") -> List[str]:
+        """Get available sound programs for a zone."""
+        try:
+            features = await self.get_features()
+            for zone_info in features.get("zone", []):
+                if zone_info.get("id") == zone:
+                    programs = zone_info.get("sound_program_list", [])
+                    _LOG.info(f"Found {len(programs)} sound programs for zone {zone}")
+                    return programs
+            return []
+        except Exception as e:
+            _LOG.error(f"Failed to get sound programs: {e}")
+            return []
 
     @classmethod
     async def discover_devices(cls, timeout: int = 10) -> List[Tuple[str, DeviceInfo]]:
