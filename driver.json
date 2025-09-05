@@ -1,0 +1,37 @@
+{
+  "driver_id": "uc_intg_yamaha_musiccast",
+  "version": "1.0.0",
+  "min_core_api": "0.21.0",
+  "name": {
+    "en": "Yamaha MusicCast"
+  },
+  "description": {
+    "en": "Integration for Yamaha MusicCast audio devices supporting playback control, volume management, and multi-zone audio streaming."
+  },
+  "developer": {
+    "name": "Meir Miyara",
+    "email": "meir.miyara@gmail.com"
+  },
+  "home_page": "https://github.com/mase1981/uc-intg-musiccast",
+  "documentation": "https://github.com/mase1981/uc-intg-musiccast/blob/main/README.md",
+  "setup_data_schema": {
+    "title": {
+      "en": "Yamaha MusicCast Device Setup"
+    },
+    "settings": [
+      {
+        "id": "host",
+        "label": {
+          "en": "MusicCast Device IP Address"
+        },
+        "field": {
+          "text": {
+            "value": "",
+            "placeholder": "Enter your MusicCast device IP address (e.g., 192.168.1.100 or localhost:8080)"
+          }
+        }
+      }
+    ]
+  },
+  "release_date": "2025-01-03"
+}

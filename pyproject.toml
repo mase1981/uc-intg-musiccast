@@ -1,0 +1,75 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "uc-intg-yamaha-musiccast"
+version = "1.0.0"
+description = "Unfolded Circle Remote Two integration for Yamaha MusicCast devices"
+readme = "README.md"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Meir Miyara", email = "meir.miyara@gmail.com"}
+]
+keywords = [
+    "unfoldedcircle",
+    "remote",
+    "integration",
+    "yamaha",
+    "musiccast",
+    "home-automation"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop", 
+    "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Home Automation",
+    "Topic :: Multimedia :: Sound/Audio"
+]
+requires-python = ">=3.11"
+dependencies = [
+    "ucapi>=0.3.1",
+    "aiohttp>=3.9.0",
+    "asyncio-mqtt>=0.11.0",
+    "certifi>=2023.11.17"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.5.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/mase1981/uc-intg-musiccast"
+Repository = "https://github.com/mase1981/uc-intg-musiccast.git"
+Documentation = "https://github.com/mase1981/uc-intg-musiccast/blob/main/README.md"
+Issues = "https://github.com/mase1981/uc-intg-musiccast/issues"
+
+[tool.setuptools]
+packages = ["uc_intg_musiccast"]
+
+[tool.setuptools.package-data]
+uc_intg_musiccast = ["*.json"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
