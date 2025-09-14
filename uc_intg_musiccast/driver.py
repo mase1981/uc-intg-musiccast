@@ -8,14 +8,14 @@ Yamaha MusicCast Integration Driver for Unfolded Circle Remote Two/3.
 import asyncio
 import logging
 import os
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from aiohttp import web
 
 import ucapi
-from ucapi import DeviceStates, Events, IntegrationSetupError, SetupComplete, SetupError
+from ucapi import DeviceStates, Events, IntegrationSetupError, SetupComplete, SetupError, RequestUserInput, UserDataResponse
 
 from uc_intg_musiccast.client import YamahaMusicCastClient
-from uc_intg_musiccast.config import Config
+from uc_intg_musiccast.config import Config, MusicCastDeviceConfig
 from uc_intg_musiccast.media_player import YamahaMusicCastMediaPlayer
 from uc_intg_musiccast.remote import MusicCastRemote
 
@@ -28,20 +28,22 @@ _LOG = logging.getLogger(__name__)
 # Globals
 api: Optional[ucapi.IntegrationAPI] = None
 config: Optional[Config] = None
-client: Optional[YamahaMusicCastClient] = None
-update_task: Optional[asyncio.Task] = None
-media_player_entity: Optional[YamahaMusicCastMediaPlayer] = None
-remote_entity: Optional[MusicCastRemote] = None
+clients: Dict[str, YamahaMusicCastClient] = {}
+media_players: Dict[str, YamahaMusicCastMediaPlayer] = {}
+remotes: Dict[str, MusicCastRemote] = {}
 
 entities_ready = False
 initialization_lock = asyncio.Lock()
 
+# Multi-device setup state
+setup_state = {"step": "initial", "device_count": 1, "devices_data": []}
+
 async def _initialize_integration():
     """
     CRITICAL: Initialize integration and create entities atomically.
-    This prevents race conditions between UC Remote subscription and entity creation.
+    Enhanced for multi-device support.
     """
-    global client, api, config, update_task, media_player_entity, remote_entity, entities_ready
+    global clients, api, config, media_players, remotes, entities_ready
     
     async with initialization_lock:
         if entities_ready:
@@ -54,103 +56,245 @@ async def _initialize_integration():
                 await api.set_device_state(DeviceStates.ERROR)
             return False
 
-        _LOG.info("Initializing MusicCast integration...")
+        _LOG.info("Initializing MusicCast integration for %d devices...", len(config.config.devices))
         if api: 
             await api.set_device_state(DeviceStates.CONNECTING)
 
-        try:
-            host = config.get_host()
-            client = YamahaMusicCastClient(host)
-            device_info = await client.get_device_info()
+        connected_devices = 0
 
-            device_name = device_info.friendly_name or 'MusicCast Device'
-            device_id = device_info.device_id or 'MUSICCAST_DEVICE'
+        for device_id, device_config in config.config.devices.items():
+            if not device_config.enabled:
+                _LOG.info("Skipping disabled device: %s", device_config.name)
+                continue
 
-            _LOG.info("Connected to MusicCast device: %s (ID: %s)", device_name, device_id)
+            try:
+                _LOG.info("Connecting to MusicCast device: %s at %s", device_config.name, device_config.address)
+                
+                client = YamahaMusicCastClient(device_config.address)
+                device_info = await client.get_device_info()
 
-            _LOG.info("Creating entities...")
-            
-            # Create entities
-            media_player_entity = YamahaMusicCastMediaPlayer(device_id, device_name)
-            remote_entity = MusicCastRemote(device_id, device_name)
+                device_name = device_config.name or device_info.friendly_name or 'MusicCast Device'
+                device_entity_id = device_info.device_id or f'MUSICCAST_{device_id}'
 
-            # Set client for both entities
-            media_player_entity.set_client(client)
-            remote_entity.set_client(client)
+                _LOG.info("Connected to MusicCast device: %s (ID: %s)", device_name, device_entity_id)
 
-            # Link API to entities
-            media_player_entity._integration_api = api
-            remote_entity._integration_api = api
+                # Create entities with unique IDs for multi-device support
+                media_player_id = f"musiccast_{device_id}_media_player"
+                remote_id = f"musiccast_{device_id}_remote"
 
-            # Add entities to available BEFORE marking ready
-            api.available_entities.add(media_player_entity)
-            api.available_entities.add(remote_entity)
-            api.configured_entities.add(media_player_entity)
-            api.configured_entities.add(remote_entity)
+                # Create entities
+                media_player_entity = YamahaMusicCastMediaPlayer(media_player_id, device_name)
+                remote_entity = MusicCastRemote(remote_id, device_name)
 
-            # Initialize sources and capabilities
-            await media_player_entity.initialize_sources()
-            await remote_entity.initialize_capabilities()
-            await media_player_entity.update_attributes()
+                # Set client for both entities
+                media_player_entity.set_client(client)
+                remote_entity.set_client(client)
 
+                # Link API to entities
+                media_player_entity._integration_api = api
+                remote_entity._integration_api = api
+
+                # Add entities to available BEFORE marking ready
+                api.available_entities.add(media_player_entity)
+                api.available_entities.add(remote_entity)
+                api.configured_entities.add(media_player_entity)
+                api.configured_entities.add(remote_entity)
+
+                # Initialize sources and capabilities
+                await media_player_entity.initialize_sources()
+                await remote_entity.initialize_capabilities()
+                await media_player_entity.update_attributes()
+
+                # Store references
+                clients[device_id] = client
+                media_players[device_id] = media_player_entity
+                remotes[device_id] = remote_entity
+
+                connected_devices += 1
+                _LOG.info("Successfully setup device: %s", device_config.name)
+
+            except Exception as e:
+                _LOG.error("Failed to setup device %s: %s", device_config.name, e, exc_info=True)
+                continue
+
+        if connected_devices > 0:
             entities_ready = True
-            
-            # Start update task
-            if update_task:
-                update_task.cancel()
-            update_task = asyncio.create_task(periodic_update())
-
             await api.set_device_state(DeviceStates.CONNECTED)
-            _LOG.info("MusicCast integration initialization completed successfully.")
+            _LOG.info("MusicCast integration initialization completed successfully - %d/%d devices connected.", connected_devices, len(config.config.devices))
             return True
-
-        except Exception as e:
-            _LOG.error("Initialization failed: %s", e, exc_info=True)
-            entities_ready = False  # CRITICAL: Don't mark ready on failure
+        else:
+            entities_ready = False
             if api: 
                 await api.set_device_state(DeviceStates.ERROR)
+            _LOG.error("No devices could be connected during initialization")
             return False
 
 async def setup_handler(msg: ucapi.SetupDriver) -> ucapi.SetupAction:
-    """Handle driver setup requests."""
-    global config
+    """Enhanced setup handler for multi-device support following Naim pattern."""
+    global config, entities_ready, setup_state
 
     if isinstance(msg, ucapi.DriverSetupRequest):
-        host = msg.setup_data.get("host")
-        if not host:
-            _LOG.error("No host provided in setup data")
-            return SetupError(IntegrationSetupError.OTHER)
+        # Initial setup - check if single or multi-device
+        device_count = int(msg.setup_data.get("device_count", 1))
+        
+        if device_count == 1:
+            # Single device - use existing simple flow
+            return await _handle_single_device_setup(msg.setup_data)
+        else:
+            # Multi-device setup
+            setup_state = {"step": "collect_ips", "device_count": device_count, "devices_data": []}
+            return await _request_device_ips(device_count)
+    
+    elif isinstance(msg, UserDataResponse):
+        if setup_state["step"] == "collect_ips":
+            return await _handle_device_ips_collection(msg.input_values)
 
-        _LOG.info("Testing connection to MusicCast device at %s", host)
-        try:
-            async with YamahaMusicCastClient(host) as test_client:
-                device_info = await test_client.get_device_info()
-                if not device_info or not device_info.device_id:
-                     _LOG.error("Connection test failed for host: %s", host)
-                     return SetupError(IntegrationSetupError.CONNECTION_REFUSED)
+    return SetupError(IntegrationSetupError.OTHER)
 
-            config.set("host", host)
-            config.save()
+async def _handle_single_device_setup(setup_data: Dict[str, Any]) -> ucapi.SetupAction:
+    """Handle single device setup (existing flow)."""
+    host = setup_data.get("host")
+    if not host:
+        _LOG.error("No host provided in setup data")
+        return SetupError(IntegrationSetupError.OTHER)
 
-            asyncio.create_task(_initialize_integration())
-            return SetupComplete()
+    _LOG.info("Testing connection to MusicCast device at %s", host)
+    try:
+        async with YamahaMusicCastClient(host) as test_client:
+            device_info = await test_client.get_device_info()
+            if not device_info or not device_info.device_id:
+                 _LOG.error("Connection test failed for host: %s", host)
+                 return SetupError(IntegrationSetupError.CONNECTION_REFUSED)
 
-        except Exception as e:
-            _LOG.error("Setup error: %s", e)
-            return SetupError(IntegrationSetupError.OTHER)
+        # Create device configuration
+        device_id = f"musiccast_{host.replace('.', '_')}"
+        device_config = MusicCastDeviceConfig(
+            id=device_id,
+            name=device_info.friendly_name or f"MusicCast Device ({host})",
+            address=host,
+            port=80,
+            enabled=True,
+            standby_monitoring=True
+        )
 
+        config.add_device(device_config)
+        
+        # Initialize entities immediately after setup
+        asyncio.create_task(_initialize_integration())
+        return SetupComplete()
+
+    except Exception as e:
+        _LOG.error("Setup error: %s", e)
+        return SetupError(IntegrationSetupError.OTHER)
+
+async def _request_device_ips(device_count: int) -> RequestUserInput:
+    """Request IP addresses for multiple devices."""
+    settings = []
+    
+    for i in range(device_count):
+        settings.extend([
+            {
+                "id": f"device_{i}_ip",
+                "label": {"en": f"Device {i+1} IP Address"},
+                "description": {"en": f"IP address for MusicCast device {i+1} (e.g., 192.168.1.{100+i})"},
+                "field": {"text": {"value": f"192.168.1.{100+i}"}}
+            },
+            {
+                "id": f"device_{i}_name", 
+                "label": {"en": f"Device {i+1} Name"},
+                "description": {"en": f"Friendly name for device {i+1}"},
+                "field": {"text": {"value": f"MusicCast Device {i+1}"}}
+            }
+        ])
+    
+    return RequestUserInput(
+        title={"en": f"Configure {device_count} MusicCast Devices"},
+        settings=settings
+    )
+
+async def _handle_device_ips_collection(input_values: Dict[str, Any]) -> ucapi.SetupAction:
+    """Process multiple device IPs and test connections."""
+    devices_to_test = []
+    
+    # Extract device data from input
+    device_index = 0
+    while f"device_{device_index}_ip" in input_values:
+        ip_input = input_values[f"device_{device_index}_ip"]
+        name = input_values[f"device_{device_index}_name"]
+        
+        devices_to_test.append({
+            "host": ip_input.strip(),
+            "name": name.strip(),
+            "index": device_index
+        })
+        device_index += 1
+    
+    # Test all devices concurrently
+    _LOG.info(f"Testing connections to {len(devices_to_test)} devices...")
+    test_results = await _test_multiple_devices(devices_to_test)
+    
+    # Process results and save successful configurations
+    successful_devices = 0
+    for device_data, success in zip(devices_to_test, test_results):
+        if success:
+            device_id = f"musiccast_{device_data['host'].replace('.', '_')}"
+            device_config = MusicCastDeviceConfig(
+                id=device_id,
+                name=device_data['name'],
+                address=device_data['host'],
+                port=80,
+                enabled=True,
+                standby_monitoring=True
+            )
+            config.add_device(device_config)
+            successful_devices += 1
+            _LOG.info(f"✅ Device {device_data['index'] + 1} ({device_data['name']}) connection successful")
+        else:
+            _LOG.error(f"❌ Device {device_data['index'] + 1} ({device_data['name']}) connection failed")
+    
+    if successful_devices == 0:
+        _LOG.error("No devices could be connected")
+        return SetupError(IntegrationSetupError.CONNECTION_REFUSED)
+    
+    # Initialize all entities
+    await _initialize_integration()
+    _LOG.info(f"Multi-device setup completed: {successful_devices}/{len(devices_to_test)} devices configured")
     return SetupComplete()
 
+async def _test_multiple_devices(devices: List[Dict]) -> List[bool]:
+    """Test connections to multiple devices concurrently."""
+    async def test_device(device_data):
+        try:
+            async with YamahaMusicCastClient(device_data['host']) as client:
+                device_info = await client.get_device_info()
+                if device_info:
+                    _LOG.info(f"Device {device_data['index'] + 1}: {device_info.model_name} ({device_info.device_id})")
+                    return True
+                return False
+        except Exception as e:
+            _LOG.error(f"Device {device_data['index'] + 1} test error: {e}")
+            return False
+    
+    tasks = [test_device(device) for device in devices]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    # Convert exceptions to False
+    return [result if isinstance(result, bool) else False for result in results]
+
 async def periodic_update():
-    """Periodically update entity states."""
+    """Periodically update entity states for all devices."""
     _LOG.info("Starting periodic update task.")
     while True:
         try:
             await asyncio.sleep(5.0)
             if (api and api.device_state == DeviceStates.CONNECTED and
-                media_player_entity and remote_entity and client and entities_ready):
-                await media_player_entity.update_attributes()
-                await remote_entity.update_attributes()
+                media_players and remotes and entities_ready):
+                for device_id in media_players:
+                    media_player = media_players.get(device_id)
+                    remote = remotes.get(device_id)
+                    if media_player and remote:
+                        await media_player.update_attributes()
+                        await remote.update_attributes()
         except asyncio.CancelledError:
             _LOG.info("Periodic update task cancelled.")
             break
@@ -168,11 +312,16 @@ async def on_subscribe_entities(entity_ids: List[str]):
             _LOG.error("Failed to initialize during subscription attempt")
             return
     
-    # Proceed with subscription logic
-    if media_player_entity and media_player_entity.id in entity_ids:
-        await media_player_entity.update_attributes()
-    if remote_entity and remote_entity.id in entity_ids:
-        await remote_entity.update_attributes()
+    # Proceed with subscription logic for all devices
+    for entity_id in entity_ids:
+        for device_id, media_player in media_players.items():
+            if media_player.id == entity_id:
+                await media_player.update_attributes()
+                break
+        for device_id, remote in remotes.items():
+            if remote.id == entity_id:
+                await remote.update_attributes()
+                break
 
 async def on_connect():
     """Handle UC Remote connection."""
@@ -246,6 +395,9 @@ async def main():
         api.add_listener(Events.UNSUBSCRIBE_ENTITIES, on_unsubscribe_entities)
         api.add_listener(Events.CONNECT, on_connect)
         api.add_listener(Events.DISCONNECT, on_disconnect)
+
+        # Start periodic update task
+        asyncio.create_task(periodic_update())
 
         # Set initial state based on configuration
         if not config.is_configured():

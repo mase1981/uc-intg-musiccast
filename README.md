@@ -1,6 +1,6 @@
 # Yamaha MusicCast Integration for Unfolded Circle Remote 2/3
 
-Control your Yamaha MusicCast audio devices directly from your Unfolded Circle Remote 2 or Remote 3.
+Control your Yamaha MusicCast audio devices directly from your Unfolded Circle Remote 2 or Remote 3. **Now supports multiple devices!**
 
 ![Yamaha MusicCast](https://img.shields.io/badge/Yamaha-MusicCast-red)
 ![Version](https://img.shields.io/badge/version-1.0.0-green)
@@ -10,7 +10,7 @@ Control your Yamaha MusicCast audio devices directly from your Unfolded Circle R
 
 ## Features
 
-This integration provides comprehensive control of your Yamaha MusicCast audio devices directly from your Unfolded Circle Remote, supporting a wide range of audio control and streaming functions.
+This integration provides comprehensive control of your Yamaha MusicCast audio devices directly from your Unfolded Circle Remote, supporting a wide range of audio control and streaming functions. **Multi-device support** allows you to control up to 10 MusicCast devices from a single integration.
 
 ### 🎵 **Media Player Control**
 
@@ -33,6 +33,7 @@ Transform your remote into a powerful MusicCast controller with full playback ma
 - **Shuffle Control** - Toggle shuffle on/off
 - **Now Playing Display** - Artist, album, track, and artwork display
 - **Playback Position** - Real-time position tracking with duration
+- **Multi-Device Support** - Control multiple MusicCast devices independently
 
 ### 🎮 **Remote Control Interface**
 
@@ -57,16 +58,38 @@ Real-time display of device and playback status:
 - **Current Track**: Title, artist, album information
 - **Album Artwork**: High-quality cover art display
 
-#### **Two-Entity Integration**
-- **Media Player Entity**: Primary control interface with full media features
-- **Remote Entity**: Button-based control for traditional remote experience
-- **Synchronized State**: Both entities reflect real device status
+#### **Multi-Entity Integration**
+- **Media Player Entity**: Primary control interface with full media features (one per device)
+- **Remote Entity**: Button-based control for traditional remote experience (one per device)
+- **Synchronized State**: All entities reflect real device status
+- **Independent Control**: Each device operates independently
 
 #### **Smart State Management**
 - **Playing State**: Device on and actively playing content
 - **Paused State**: Device on but playback paused
 - **Standby State**: Device in standby/off mode
 - **Source Indication**: Current input source clearly displayed
+
+## Multi-Device Support
+
+### **Setup Multiple Devices**
+The integration now supports **1-10 MusicCast devices** in a single setup:
+
+1. **Device Count Selection**: Choose how many devices to configure during setup
+2. **Individual Configuration**: Enter IP address and name for each device
+3. **Concurrent Testing**: All devices tested simultaneously during setup
+4. **Independent Entities**: Each device gets its own media player and remote entities
+
+### **Entity Naming**
+Each device creates two entities:
+- **Media Player**: `Device Name` (e.g., "Living Room YAS-209")
+- **Remote Control**: `Device Name Remote` (e.g., "Living Room YAS-209 Remote")
+
+### **Benefits**
+- **Centralized Control**: Manage all MusicCast devices from one integration
+- **Room-Based Setup**: Perfect for multi-room audio systems
+- **Individual Control**: Each device operates independently
+- **Simplified Management**: Single integration for your entire MusicCast ecosystem
 
 ## Supported Yamaha Models
 
@@ -133,57 +156,38 @@ services:
       - "com.unfoldedcircle.version=1.0.0"
 ```
 
-**Docker Run:**
-```bash
-docker run -d --restart=unless-stopped --net=host \
-  -v $(pwd)/data:/data \
-  -e UC_CONFIG_HOME=/data \
-  -e UC_INTEGRATION_INTERFACE=0.0.0.0 \
-  -e UC_INTEGRATION_HTTP_PORT=9090 \
-  -e UC_DISABLE_MDNS_PUBLISH=false \
-  --name uc-intg-yamaha-musiccast \
-  ghcr.io/mase1981/uc-intg-musiccast:latest
-```
-
-**Specific Version:**
-```bash
-# Replace v1.0.1 with desired version
-docker pull ghcr.io/mase1981/uc-intg-musiccast:v1.0.1
-docker run -d --restart=unless-stopped --net=host \
-  -v $(pwd)/data:/data \
-  -e UC_CONFIG_HOME=/data \
-  --name uc-intg-yamaha-musiccast \
-  ghcr.io/mase1981/uc-intg-musiccast:v1.0.1
-```
-
 ### Option 3: Development Simulator
-For testing without physical hardware:
+For testing without physical hardware, including multi-device testing:
 
-**Run Simulator:**
+**Single Device:**
 ```bash
-# In separate terminal
-python yamaha_simulator.py
-
-# Simulator runs on http://localhost:8080
+python yamaha_simulator.py --single --port 8080
 # Use 'localhost:8080' as device IP during setup
+```
+
+**Multi-Device Testing:**
+```bash
+python yamaha_simulator.py --count 3
+# Creates 3 simulated devices on ports 8080, 8081, 8082
+# Use 'localhost:8080', 'localhost:8081', 'localhost:8082' during setup
 ```
 
 ## Configuration
 
-### Step 1: Prepare Your MusicCast Device
+### Step 1: Prepare Your MusicCast Device(s)
 
 1. **Network Setup:**
-   - Connect device to your local network (WiFi or Ethernet)
-   - Note the device's IP address from your router or device display
-   - Ensure device is powered on and network connected
+   - Connect each device to your local network (WiFi or Ethernet)
+   - Note each device's IP address from your router or device display
+   - Ensure all devices are powered on and network connected
 
 2. **MusicCast App Verification:**
    - Download Yamaha MusicCast app to verify device connectivity
-   - Confirm device appears and is controllable in the app
+   - Confirm each device appears and is controllable in the app
    - Test basic functions like play/pause and volume
 
 3. **Network Requirements:**
-   - Device and Remote must be on same local network
+   - All devices and Remote must be on same local network
    - Standard HTTP port 80 communication
    - No firewall blocking required
 
@@ -193,25 +197,30 @@ python yamaha_simulator.py
 2. The Yamaha MusicCast integration should appear in **Available Integrations**
 3. Click **"Configure"** and follow the setup wizard:
 
-   **Device Connection:**
-   - **IP Address**: Your MusicCast device IP address (e.g., 192.168.1.100)
-   - **Auto-Discovery**: Integration attempts to find devices automatically
-   - **Manual Entry**: Enter IP address if auto-discovery fails
+#### **Single Device Setup**
+   - **Number of Devices**: Select "1"
+   - **IP Address**: Enter device IP (e.g., 192.168.1.100)
+   - **Test Connection**: Verify device communication
+   - **Complete Setup**: Creates 2 entities (Media Player + Remote)
 
-4. Click **"Test Connection"** to verify device communication
-5. Integration will detect available input sources automatically
-6. Click **"Complete Setup"** when connection is successful
-7. Two entities will be created:
-   - **[Device Name]** (Media Player)
-   - **[Device Name] Remote** (Remote Control)
+#### **Multi-Device Setup**
+   - **Number of Devices**: Select 2-10 devices
+   - **Device Configuration**: For each device, enter:
+     - **IP Address**: Device IP address
+     - **Device Name**: Friendly name (e.g., "Living Room YAS-209")
+   - **Concurrent Testing**: All devices tested simultaneously
+   - **Complete Setup**: Creates 2 entities per device
+
+4. Integration will detect available input sources automatically for each device
+5. Entities will be created and available immediately
 
 ### Step 3: Add Entities to Activities
 
 1. Go to **Activities** in your remote interface
 2. Edit or create an activity
 3. Add MusicCast entities from the **Available Entities** list:
-   - **MusicCast Device** (Media Player) - Primary control interface
-   - **MusicCast Device Remote** (Remote) - Button-based control
+   - **Device Name** (Media Player) - Primary control interface
+   - **Device Name Remote** (Remote) - Button-based control
 4. Configure button mappings and UI layout as desired
 5. Save your activity
 
@@ -219,7 +228,7 @@ python yamaha_simulator.py
 
 ### Media Player Control
 
-Use the **MusicCast Device** media player entity:
+Use the **MusicCast Device** media player entity for each device:
 
 1. **Playback Control**:
    - **Play/Pause**: Toggle playback state
@@ -243,7 +252,7 @@ Use the **MusicCast Device** media player entity:
 
 ### Remote Control
 
-Use the **MusicCast Device Remote** remote entity:
+Use the **MusicCast Device Remote** remote entity for traditional control:
 
 1. **Main Controls Page**:
    - Transport controls for playback management
@@ -255,67 +264,50 @@ Use the **MusicCast Device Remote** remote entity:
    - Quick switching between favorite sources
    - Visual confirmation of source changes
 
-### Status Monitoring
+### Multi-Device Management
 
-#### **Media Player States**
-- **Playing**: Device on and actively playing content with transport controls
-- **Paused**: Device on but playback paused, ready to resume
-- **Stopped**: Device on but no active playback
-- **Standby**: Device in standby/off mode
+When using multiple devices:
 
-#### **Source Information**
-- Current input source always displayed
-- Automatic detection of available sources
-- Real-time source switching feedback
-
-#### **Now Playing Display**
-- Track title, artist, and album information
-- Album artwork when available
-- Playback position and total duration
-- Repeat and shuffle status indicators
+1. **Independent Control**: Each device operates completely independently
+2. **Room-Based Activities**: Create activities for each room/device
+3. **Centralized Overview**: All devices visible in integration settings
+4. **Synchronized Status**: Real-time status updates for all devices
 
 ## Performance & Optimization
 
 ### **Intelligent Polling System**
-- **Dynamic Updates**: Real-time status monitoring every 5 seconds
+- **Dynamic Updates**: Real-time status monitoring every 5 seconds per device
 - **Resource Efficient**: Minimal network traffic and device load
-- **Race Condition Prevention**: Advanced entity persistence management
+- **Multi-Device Optimization**: Concurrent status updates for all devices
 - **Error Recovery**: Automatic reconnection after network interruptions
 
 ### **Network Requirements**
-- **Local Network**: Integration requires same network as MusicCast device
-- **Bandwidth**: Minimal (~500 bytes per update cycle)
+- **Local Network**: Integration requires same network as MusicCast devices
+- **Bandwidth**: Minimal (~500 bytes per device per update cycle)
 - **Latency**: Optimized for typical home network performance
 - **Reliability**: Graceful handling of temporary network issues
 
 ### **Entity Persistence**
-- **Post-Reboot Stability**: Entities remain available after system restarts
-- **State Synchronization**: Real-time sync between remote and device
+- **Post-Reboot Stability**: All entities remain available after system restarts
+- **State Synchronization**: Real-time sync between remote and devices
 - **Configuration Persistence**: Settings survive system reboots
 
 ## Troubleshooting
 
 ### Common Issues
 
-#### **"Device Not Found"**
-- Verify MusicCast device IP address is correct
-- Ensure device and Remote are on same network
-- Check device is powered on and network connected
-- Try using MusicCast app to verify device connectivity
-- Restart device and try again
+#### **"Device Not Found" (Multi-Device)**
+- Verify all device IP addresses are correct
+- Ensure all devices and Remote are on same network
+- Check each device is powered on and network connected
+- Try using MusicCast app to verify each device connectivity
+- Verify devices don't conflict on same IP address
 
-#### **"Connection Failed"**
-- Confirm device IP address in integration settings
-- Check network connectivity between Remote and device
-- Verify no firewall blocking communication
-- Ensure device supports Yamaha Extended Control API
-- Try connecting from MusicCast mobile app first
-
-#### **"Sources Not Available"**
-- Verify device inputs are properly connected
-- Check device input configuration in Yamaha settings
-- Restart integration to refresh source list
-- Some sources may require content to be active
+#### **"Partial Device Setup"**
+- Some devices may connect while others fail
+- Check failed device IP addresses and network connectivity
+- Successfully connected devices will still work
+- Re-run setup to add failed devices
 
 #### **"Commands Not Working"**
 - Ensure device is powered on (not in deep standby)
@@ -325,9 +317,9 @@ Use the **MusicCast Device Remote** remote entity:
 
 #### **"Integration Offline"**
 - Check Remote's network connectivity
-- Verify MusicCast device is still accessible
+- Verify each MusicCast device is still accessible
 - Restart integration from Remote settings
-- Check device hasn't changed IP address
+- Check devices haven't changed IP addresses
 
 ### Debug Information
 
@@ -342,14 +334,10 @@ Enable detailed logging for troubleshooting:
 docker logs uc-intg-yamaha-musiccast
 ```
 
-**Integration Logs:**
-- **Remote Interface**: Settings → Integrations → Yamaha MusicCast → View Logs
-- **Common Errors**: Connection timeouts, API response errors, source detection issues
-
-**Device Verification:**
-- **MusicCast App**: Verify device appears and responds
-- **Network Ping**: Confirm device IP is reachable
-- **Browser Test**: Visit `http://device-ip/YamahaExtendedControl/v1/system/getDeviceInfo`
+**Multi-Device Verification:**
+- **MusicCast App**: Verify each device appears and responds
+- **Network Ping**: Confirm each device IP is reachable
+- **Browser Test**: Visit `http://device-ip/YamahaExtendedControl/v1/system/getDeviceInfo` for each device
 
 ## Limitations
 
@@ -360,6 +348,7 @@ docker logs uc-intg-yamaha-musiccast
 - **Network Dependency**: Requires continuous network connectivity
 
 ### **Integration Limitations**  
+- **Maximum Devices**: Up to 10 devices per integration instance
 - **Single Zone**: Currently supports main zone only
 - **No Multi-Room**: Multi-room/zone linking not implemented
 - **Limited Preset Support**: Preset management not yet implemented
@@ -392,8 +381,8 @@ docker logs uc-intg-yamaha-musiccast
 
 3. **Run development simulator:**
    ```bash
-   # Terminal 1: Start simulator
-   python yamaha_simulator.py
+   # Terminal 1: Start multi-device simulator
+   python yamaha_simulator.py --count 3
    
    # Terminal 2: Run integration
    python uc_intg_musiccast/driver.py
@@ -403,7 +392,20 @@ docker logs uc-intg-yamaha-musiccast
    - Open project in VS Code
    - Use F5 to start debugging session
    - Integration runs on `localhost:9090`
-   - Use `localhost:8080` as device IP to connect to simulator
+   - Use simulator addresses for device IPs
+
+### Testing Multi-Device Setup
+
+```bash
+# Test with 3 simulated devices
+python yamaha_simulator.py --count 3
+
+# In integration setup:
+# Device count: 3
+# Device 1: localhost:8080 (name: Living Room YAS-209)
+# Device 2: localhost:8081 (name: Kitchen SR-B20A) 
+# Device 3: localhost:8082 (name: Bedroom MusicCast 20)
+```
 
 ### Project Structure
 
@@ -412,52 +414,31 @@ uc-intg-musiccast/
 ├── uc_intg_musiccast/          # Main package
 │   ├── __init__.py             # Package info  
 │   ├── client.py               # MusicCast API client
-│   ├── config.py               # Configuration management
-│   ├── driver.py               # Main integration driver
-│   ├── media_player.py         # Media player entity
-│   └── remote.py               # Remote control entity
+│   ├── config.py               # Configuration management (enhanced)
+│   ├── driver.py               # Main integration driver (multi-device)
+│   ├── media_player.py         # Media player entity (enhanced)
+│   └── remote.py               # Remote control entity (enhanced)
 ├── .github/workflows/          # GitHub Actions CI/CD
 │   └── build.yml               # Automated build pipeline
-├── .git/hooks/                 # Git hooks for quality
-│   └── pre-push                # Version consistency checking
-├── yamaha_simulator.py         # Development simulator
+├── yamaha_simulator.py         # Multi-device development simulator
 ├── docker-compose.yml          # Docker deployment
 ├── Dockerfile                  # Container build instructions
 ├── docker-entry.sh             # Container entry point
-├── driver.json                 # Integration metadata
+├── driver.json                 # Integration metadata (enhanced)
 ├── requirements.txt            # Dependencies
 ├── pyproject.toml              # Python project config
 └── README.md                   # This file
 ```
 
-### Testing
-
-```bash
-# Install test dependencies
-pip install -r requirements.txt
-
-# Run with simulator
-python yamaha_simulator.py  # Terminal 1
-python uc_intg_musiccast/driver.py  # Terminal 2
-
-# Test with real hardware
-# Configure integration with actual MusicCast device IP
-```
-
 ### Development Features
 
-#### **Yamaha Simulator**
+#### **Multi-Device Yamaha Simulator**
 Complete MusicCast API simulator for development without hardware:
+- **Multiple Device Support**: Simulate 1-10 devices simultaneously
 - **Full API Coverage**: All endpoints implemented
 - **Realistic Responses**: Matches real device behavior
-- **State Management**: Persistent state across requests
-- **Debug Endpoints**: Additional debugging and reset capabilities
-
-#### **Git Hooks**
-Automated quality assurance:
-- **Pre-push Hook**: Version consistency checking
-- **Version Validation**: Ensures driver.json and pyproject.toml versions match
-- **Tag Validation**: Verifies git tags match version numbers
+- **Unique Device States**: Each simulated device has different content
+- **Concurrent Testing**: Perfect for multi-device development
 
 #### **CI/CD Pipeline**
 Automated building and deployment:
@@ -466,17 +447,11 @@ Automated building and deployment:
 - **Release Artifacts**: Automatic tar.gz generation
 - **Version Management**: Semantic versioning with git tags
 
-#### **Health Monitoring**
-Production-ready health checks:
-- **Health Endpoint**: `/health` endpoint for monitoring
-- **Docker Health**: Integrated container health checking
-- **Graceful Shutdown**: Proper cleanup on container stop
-
 ### Contributing
 
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Make your changes and test with simulator
+3. Make your changes and test with multi-device simulator
 4. Test with real MusicCast hardware if available
 5. Commit changes: `git commit -m 'Add amazing feature'`
 6. Push to branch: `git push origin feature/amazing-feature`
@@ -488,19 +463,19 @@ Production-ready health checks:
 Advanced race condition prevention ensures entities remain available after system reboots:
 - **Pre-initialization**: Entities created before UC Remote connection
 - **Atomic Creation**: All entities created atomically to prevent timing issues
-- **State Guards**: Protection against subscription before entity readiness
+- **Multi-Device Coordination**: Proper entity management across multiple devices
 
-### **Source Detection**
+### **Dynamic Source Detection**
 Intelligent input source management:
-- **Dynamic Discovery**: Automatic detection of available device inputs
-- **Friendly Names**: Technical input IDs mapped to user-friendly names
+- **Device-Specific Sources**: Automatic detection based on device capabilities
+- **Per-Device Configuration**: Each device maintains its own source list
 - **Real-time Updates**: Source list updated when device configuration changes
 
 ### **State Synchronization**
 Advanced state management between entities:
-- **Dual Entity Support**: Media player and remote entities stay synchronized
+- **Dual Entity Support**: Media player and remote entities stay synchronized per device
 - **Deferred Updates**: Smart update timing prevents conflicts
-- **Attribute Persistence**: State maintained across connection interruptions
+- **Multi-Device Independence**: Each device operates independently
 
 ## Security Considerations
 
@@ -518,11 +493,11 @@ Advanced state management between entities:
 
 | Device Type | Example Models | Status | Features |
 |-------------|----------------|---------|-----------|
-| Soundbars | YAS-209, YAS-408, SR-B20A | ✅ Tested | Full control, source switching |
-| AV Receivers | RX-V6A, RX-A8A, TSR-700 | ✅ Tested | Full control, multi-input, sound programs |
-| Wireless Speakers | MusicCast 20/50 | ✅ Compatible | Playback control, limited sources |
-| Streaming Amps | WXA-50, R-N803D | ✅ Compatible | Full control, streaming sources |
-| Piano/Keyboard | Clavinova CLP series | ✅ Compatible | Basic playback if MusicCast enabled |
+| Soundbars | YAS-209, YAS-408, SR-B20A | ✅ Tested | Full control, source switching, multi-device |
+| AV Receivers | RX-V6A, RX-A8A, TSR-700 | ✅ Tested | Full control, multi-input, sound programs, multi-device |
+| Wireless Speakers | MusicCast 20/50 | ✅ Compatible | Playback control, limited sources, multi-device |
+| Streaming Amps | WXA-50, R-N803D | ✅ Compatible | Full control, streaming sources, multi-device |
+| Piano/Keyboard | Clavinova CLP series | ✅ Compatible | Basic playback if MusicCast enabled, multi-device |
 
 ## License
 

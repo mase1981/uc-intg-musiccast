@@ -20,16 +20,14 @@ from uc_intg_musiccast.client import YamahaMusicCastClient
 _LOG = logging.getLogger(__name__)
 
 class YamahaMusicCastMediaPlayer(MediaPlayer):
-    """Yamaha MusicCast media player entity."""
 
-    def __init__(self, device_id: str, device_name: str):
-        """Initialize the media player entity."""
+    def __init__(self, entity_id: str, device_name: str):
         features = self._build_features()
         attributes = self._build_initial_attributes()
 
         super().__init__(
-            identifier=f"{device_id}_media_player",
-            name=device_name,
+            identifier=entity_id,  # Use provided entity_id for multi-device support
+            name=device_name,     # Each device gets its own name
             features=features,
             attributes=attributes,
             device_class=DeviceClasses.RECEIVER,  # Changed to RECEIVER for AVR devices
@@ -67,8 +65,8 @@ class YamahaMusicCastMediaPlayer(MediaPlayer):
             Attributes.MUTED: False,
             Attributes.SOURCE_LIST: [],
             Attributes.SOURCE: "",
-            Attributes.SOUND_MODE_LIST: [],  # Added sound modes
-            Attributes.SOUND_MODE: "",       # Current sound mode
+            Attributes.SOUND_MODE_LIST: [],
+            Attributes.SOUND_MODE: "",
         }
 
     async def initialize_sources(self):
@@ -132,10 +130,10 @@ class YamahaMusicCastMediaPlayer(MediaPlayer):
             
             self.attributes[Attributes.SOUND_MODE_LIST] = sound_mode_names
             
-            _LOG.info(f"Initialized {len(self._available_sources)} sources and {len(sound_programs)} sound programs")
+            _LOG.info(f"Initialized {len(self._available_sources)} sources and {len(sound_programs)} sound programs for {self.id}")
             
         except Exception as e:
-            _LOG.error(f"Failed to initialize capabilities: {e}")
+            _LOG.error(f"Failed to initialize capabilities for {self.id}: {e}")
             # Fallback to basic setup
             self._available_sources = [
                 {"id": "spotify", "name": "Spotify", "distribution_enable": True, "play_info_type": "netusb"},
@@ -165,7 +163,6 @@ class YamahaMusicCastMediaPlayer(MediaPlayer):
 
             self.attributes[Attributes.STATE] = new_state
             
-            # FIXED: Volume handling with correct range
             self.attributes[Attributes.VOLUME] = self._convert_volume_to_percentage(
                 status.volume, status.max_volume
             )
@@ -213,7 +210,7 @@ class YamahaMusicCastMediaPlayer(MediaPlayer):
             self._force_integration_update()
 
         except Exception as e:
-            _LOG.error(f"Failed to update state: {e}")
+            _LOG.error(f"Failed to update state for {self.id}: {e}")
             self.attributes[Attributes.STATE] = States.UNAVAILABLE
             self._force_integration_update()
 
@@ -235,7 +232,7 @@ class YamahaMusicCastMediaPlayer(MediaPlayer):
                     self.id, self.attributes
                 )
             except Exception as e:
-                _LOG.debug("Could not update integration API: %s", e)
+                _LOG.debug("Could not update integration API for %s: %s", self.id, e)
 
     async def _handle_command(self, entity, cmd_id: str, params: dict = None) -> ucapi.StatusCodes:
         """Handle media player commands."""
@@ -243,7 +240,7 @@ class YamahaMusicCastMediaPlayer(MediaPlayer):
             return ucapi.StatusCodes.SERVER_ERROR
 
         try:
-            _LOG.info(f"Handling media player command: {cmd_id} with params: {params}")
+            _LOG.info(f"Handling media player command for {self.id}: {cmd_id} with params: {params}")
             
             if cmd_id == Commands.ON:
                 await self._client.set_power(self._zone, "on")
@@ -258,7 +255,6 @@ class YamahaMusicCastMediaPlayer(MediaPlayer):
             elif cmd_id == Commands.PREVIOUS:
                 await self._client.set_playback("previous")
             elif cmd_id == Commands.VOLUME and params and 'volume' in params:
-                # FIXED: Convert percentage to device volume
                 percentage = params['volume']
                 status = await self._client.get_status(self._zone)
                 device_volume = self._convert_percentage_to_volume(percentage, status.max_volume)
@@ -271,7 +267,6 @@ class YamahaMusicCastMediaPlayer(MediaPlayer):
                 current_mute = self.attributes.get(Attributes.MUTED, False)
                 await self._client.set_mute(self._zone, enable=not current_mute)
             elif cmd_id == Commands.REPEAT and params and 'repeat' in params:
-                # Map ucapi repeat modes to MusicCast
                 repeat_map = {"OFF": "off", "ONE": "one", "ALL": "all"}
                 repeat_mode = repeat_map.get(params['repeat'], "off")
                 await self._client.set_repeat(repeat_mode)
@@ -279,7 +274,6 @@ class YamahaMusicCastMediaPlayer(MediaPlayer):
                 shuffle_mode = "on" if params['shuffle'] else "off"
                 await self._client.set_shuffle(shuffle_mode)
             elif cmd_id == Commands.SELECT_SOURCE and params and 'source' in params:
-                # Handle source selection
                 source_name = params['source']
                 source_id = next(
                     (src["id"] for src in self._available_sources if src["name"] == source_name),
@@ -287,15 +281,13 @@ class YamahaMusicCastMediaPlayer(MediaPlayer):
                 )
                 if source_id:
                     await self._client.set_input(self._zone, source_id)
-                    _LOG.info(f"Switched to source: {source_name} ({source_id})")
+                    _LOG.info(f"Switched to source: {source_name} ({source_id}) for {self.id}")
                 else:
-                    _LOG.error(f"Unknown source: {source_name}")
+                    _LOG.error(f"Unknown source: {source_name} for {self.id}")
                     return ucapi.StatusCodes.BAD_REQUEST
             elif cmd_id == Commands.SELECT_SOUND_MODE and params and 'sound_mode' in params:
-                # Handle sound mode selection
                 sound_mode_name = params['sound_mode']
                 
-                # Reverse lookup friendly name to technical name
                 sound_mode_reverse_mapping = {
                     "Munich Hall": "munich", "Vienna Hall": "vienna", "Amsterdam Concert Hall": "amsterdam",
                     "2-Channel Stereo": "2ch_stereo", "All Channel Stereo": "all_ch_stereo",
@@ -303,35 +295,31 @@ class YamahaMusicCastMediaPlayer(MediaPlayer):
                     "Action Game": "action_game", "RPG Game": "roleplaying_game"
                 }
                 
-                # First try reverse mapping, then direct match, then lowercase with underscores
                 program_id = sound_mode_reverse_mapping.get(sound_mode_name)
                 if not program_id:
-                    # Try direct match in available programs
                     program_id = next(
                         (prog for prog in self._available_sound_programs 
                          if prog.replace("_", " ").title() == sound_mode_name),
                         None
                     )
                 if not program_id:
-                    # Try lowercase with underscores
                     program_id = sound_mode_name.lower().replace(" ", "_")
                 
                 if program_id and program_id in self._available_sound_programs:
                     await self._client.set_sound_program(self._zone, program_id)
-                    _LOG.info(f"Switched to sound mode: {sound_mode_name} ({program_id})")
+                    _LOG.info(f"Switched to sound mode: {sound_mode_name} ({program_id}) for {self.id}")
                 else:
-                    _LOG.error(f"Unknown sound mode: {sound_mode_name}")
+                    _LOG.error(f"Unknown sound mode: {sound_mode_name} for {self.id}")
                     return ucapi.StatusCodes.BAD_REQUEST
             else:
-                _LOG.warning(f"Unhandled command: {cmd_id}")
+                _LOG.warning(f"Unhandled command: {cmd_id} for {self.id}")
                 return ucapi.StatusCodes.NOT_IMPLEMENTED
 
-            # Defer update to allow device to respond
             asyncio.create_task(self._deferred_update())
             return ucapi.StatusCodes.OK
 
         except Exception as e:
-            _LOG.error(f"Error handling command {cmd_id}: {e}")
+            _LOG.error(f"Error handling command {cmd_id} for {self.id}: {e}")
             return ucapi.StatusCodes.SERVER_ERROR
 
     async def _deferred_update(self):

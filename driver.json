@@ -1,13 +1,13 @@
 {
   "driver_id": "uc_intg_yamaha_musiccast",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "min_core_api": "0.21.0",
   "name": {
     "en": "Yamaha MusicCast"
   },
   "icon": "uc:music",
   "description": {
-    "en": "Integration for Yamaha MusicCast audio devices supporting playback control, volume management, and multi-zone audio streaming."
+    "en": "Integration for Yamaha MusicCast audio devices supporting playback control, volume management, and multi-zone audio streaming. Supports multiple devices."
   },
   "developer": {
     "name": "Meir Miyara",
@@ -19,16 +19,38 @@
     "title": {
       "en": "Yamaha MusicCast Device Setup"
     },
+    "description": {
+      "en": "Configure your Yamaha MusicCast devices. You can set up one or multiple devices."
+    },
     "settings": [
+      {
+        "id": "device_count",
+        "label": {
+          "en": "Number of Devices"
+        },
+        "description": {
+          "en": "How many MusicCast devices do you want to configure?"
+        },
+        "field": {
+          "number": {
+            "value": 1,
+            "min": 1,
+            "max": 10
+          }
+        }
+      },
       {
         "id": "host",
         "label": {
-          "en": "MusicCast Device IP Address"
+          "en": "Device IP Address (Single Device Only)"
+        },
+        "description": {
+          "en": "For single device setup only. Enter your MusicCast device IP address (e.g., 192.168.1.100). Leave empty if configuring multiple devices."
         },
         "field": {
           "text": {
             "value": "",
-            "placeholder": "Enter your MusicCast device IP address (e.g., 192.168.1.100 or localhost:8080)"
+            "placeholder": "192.168.1.100"
           }
         }
       }

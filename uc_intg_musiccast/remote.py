@@ -17,17 +17,17 @@ from uc_intg_musiccast.client import YamahaMusicCastClient
 _LOG = logging.getLogger(__name__)
 
 class MusicCastRemote(Remote):
-    """Remote entity for Yamaha MusicCast devices."""
+    """Remote entity for Yamaha MusicCast devices with multi-device support."""
 
-    def __init__(self, device_id: str, device_name: str):
-        """Initialize the remote entity."""
+    def __init__(self, entity_id: str, device_name: str):
+        """Initialize the remote entity with custom entity ID for multi-device support."""
         features = [Features.SEND_CMD]
         attributes = {Attributes.STATE: States.ON}
         simple_commands, ui_pages = self._build_ui()
 
         super().__init__(
-            identifier=f"{device_id}_remote",
-            name=f"{device_name} Remote",
+            identifier=entity_id,  # Use provided entity_id for multi-device support
+            name=f"{device_name} Remote",  # Each device gets its own name
             features=features,
             attributes=attributes,
             simple_commands=simple_commands,
@@ -51,7 +51,7 @@ class MusicCastRemote(Remote):
         if self._capabilities_initialized:
             return
             
-        _LOG.info("Initializing MusicCast remote capabilities")
+        _LOG.info("Initializing MusicCast remote capabilities for %s", self.id)
         
         if self._client:
             try:
@@ -70,10 +70,10 @@ class MusicCastRemote(Remote):
                     self.options["simple_commands"] = simple_commands
                     self.options["user_interface"] = {"pages": ui_pages}
                 
-                _LOG.info(f"Remote initialized with {len(self._available_sources)} sources and {len(sound_programs)} sound programs")
+                _LOG.info(f"Remote initialized with {len(self._available_sources)} sources and {len(sound_programs)} sound programs for {self.id}")
                 
             except Exception as e:
-                _LOG.error(f"Failed to initialize remote capabilities: {e}")
+                _LOG.error(f"Failed to initialize remote capabilities for {self.id}: {e}")
         
         self.attributes[Attributes.STATE] = States.ON
         self._force_integration_update()
@@ -94,7 +94,7 @@ class MusicCastRemote(Remote):
                     self.id, self.attributes
                 )
             except Exception as e:
-                _LOG.debug("Could not update integration API: %s", e)
+                _LOG.debug("Could not update integration API for %s: %s", self.id, e)
 
     def _build_ui(self) -> (List[str], List[Dict[str, Any]]):
         """Build basic UI for initial setup."""
@@ -258,7 +258,7 @@ class MusicCastRemote(Remote):
         try:
             command = params.get('command') if params else None
             if cmd_id == "send_cmd" and command:
-                _LOG.info(f"Executing remote command: {command}")
+                _LOG.info(f"Executing remote command for {self.id}: {command}")
                 
                 # Playback commands
                 if command == 'play_pause':
@@ -313,7 +313,7 @@ class MusicCastRemote(Remote):
                     if any(src['id'] == input_id for src in self._available_sources):
                         await self._client.set_input(self._zone, input_id)
                     else:
-                        _LOG.warning(f"Input not available: {input_id}")
+                        _LOG.warning(f"Input not available: {input_id} for {self.id}")
                         return ucapi.StatusCodes.BAD_REQUEST
                 # Sound program commands (dynamic based on device capabilities)
                 elif command.startswith('sound_'):
@@ -321,10 +321,10 @@ class MusicCastRemote(Remote):
                     if program_id in self._available_sound_programs:
                         await self._client.set_sound_program(self._zone, program_id)
                     else:
-                        _LOG.warning(f"Sound program not available: {program_id}")
+                        _LOG.warning(f"Sound program not available: {program_id} for {self.id}")
                         return ucapi.StatusCodes.BAD_REQUEST
                 else:
-                    _LOG.warning(f"Unhandled remote command: {command}")
+                    _LOG.warning(f"Unhandled remote command: {command} for {self.id}")
                     return ucapi.StatusCodes.NOT_IMPLEMENTED
                 
                 asyncio.create_task(self._deferred_update())
@@ -333,46 +333,58 @@ class MusicCastRemote(Remote):
                 return ucapi.StatusCodes.BAD_REQUEST
 
         except Exception as e:
-            _LOG.error(f"Error executing command {params}: {e}")
+            _LOG.error(f"Error executing command {params} for {self.id}: {e}")
             return ucapi.StatusCodes.SERVER_ERROR
 
     def _get_current_mute_state(self) -> bool:
         """Helper to safely get mute state from parent media player."""
         try:
             if self._integration_api and hasattr(self._integration_api, 'configured_entities'):
-                mp_entity = self._integration_api.configured_entities.get(
-                    self.id.replace('_remote', '_media_player')
-                )
+                # Find corresponding media player entity
+                mp_entity_id = self.id.replace('_remote', '_media_player')
+                mp_entity = None
+                for entity in self._integration_api.configured_entities._entities:
+                    if entity.id == mp_entity_id:
+                        mp_entity = entity
+                        break
                 if mp_entity:
                     return mp_entity.attributes.get('muted', False)
         except Exception as e:
-            _LOG.debug(f"Could not get mute state: {e}")
+            _LOG.debug(f"Could not get mute state for {self.id}: {e}")
         return False
 
     def _get_current_repeat_state(self) -> str:
         """Helper to get current repeat state."""
         try:
             if self._integration_api and hasattr(self._integration_api, 'configured_entities'):
-                mp_entity = self._integration_api.configured_entities.get(
-                    self.id.replace('_remote', '_media_player')
-                )
+                # Find corresponding media player entity
+                mp_entity_id = self.id.replace('_remote', '_media_player')
+                mp_entity = None
+                for entity in self._integration_api.configured_entities._entities:
+                    if entity.id == mp_entity_id:
+                        mp_entity = entity
+                        break
                 if mp_entity:
                     return mp_entity.attributes.get('repeat', 'off')
         except Exception as e:
-            _LOG.debug(f"Could not get repeat state: {e}")
+            _LOG.debug(f"Could not get repeat state for {self.id}: {e}")
         return 'off'
 
     def _get_current_shuffle_state(self) -> bool:
         """Helper to get current shuffle state."""
         try:
             if self._integration_api and hasattr(self._integration_api, 'configured_entities'):
-                mp_entity = self._integration_api.configured_entities.get(
-                    self.id.replace('_remote', '_media_player')
-                )
+                # Find corresponding media player entity
+                mp_entity_id = self.id.replace('_remote', '_media_player')
+                mp_entity = None
+                for entity in self._integration_api.configured_entities._entities:
+                    if entity.id == mp_entity_id:
+                        mp_entity = entity
+                        break
                 if mp_entity:
                     return mp_entity.attributes.get('shuffle', False)
         except Exception as e:
-            _LOG.debug(f"Could not get shuffle state: {e}")
+            _LOG.debug(f"Could not get shuffle state for {self.id}: {e}")
         return False
 
     async def _deferred_update(self):
@@ -380,10 +392,14 @@ class MusicCastRemote(Remote):
         await asyncio.sleep(0.5)
         try:
             if self._integration_api and hasattr(self._integration_api, 'configured_entities'):
-                mp_entity = self._integration_api.configured_entities.get(
-                    self.id.replace('_remote', '_media_player')
-                )
+                # Find corresponding media player entity
+                mp_entity_id = self.id.replace('_remote', '_media_player')
+                mp_entity = None
+                for entity in self._integration_api.configured_entities._entities:
+                    if entity.id == mp_entity_id:
+                        mp_entity = entity
+                        break
                 if mp_entity and hasattr(mp_entity, 'update_attributes'):
                     await mp_entity.update_attributes()
         except Exception as e:
-            _LOG.error(f"Could not trigger deferred update for media player: {e}")
+            _LOG.error(f"Could not trigger deferred update for media player from {self.id}: {e}")
