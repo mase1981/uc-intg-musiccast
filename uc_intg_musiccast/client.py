@@ -314,6 +314,16 @@ class YamahaMusicCastClient:
         await self._make_request("netusb/setShuffle", {"shuffle": shuffle})
         return True
 
+    async def toggle_shuffle(self) -> bool:
+        """Toggle shuffle mode."""
+        await self._make_request("netusb/toggleShuffle")
+        return True
+
+    async def toggle_repeat(self) -> bool:
+        """Toggle repeat mode."""
+        await self._make_request("netusb/toggleRepeat")
+        return True
+
     async def get_available_inputs(self, zone: str = "main") -> List[Dict[str, str]]:
         """Get available inputs for a zone from device capabilities."""
         try:
@@ -340,7 +350,10 @@ class YamahaMusicCastClient:
                 "usb": "USB", "tuner": "Tuner", "net_radio": "Net Radio", "phono": "Phono",
                 "napster": "Napster", "qobuz": "Qobuz", "tidal": "Tidal", "deezer": "Deezer",
                 "amazon_music": "Amazon Music", "alexa": "Alexa", "server": "Server",
-                "mc_link": "MusicCast Link", "main_sync": "Main Sync", "tv": "TV"
+                "mc_link": "MusicCast Link", "main_sync": "Main Sync", "tv": "TV",
+                "optical1": "Optical 1", "optical2": "Optical 2", "coaxial1": "Coaxial 1", 
+                "coaxial2": "Coaxial 2", "line1": "Line 1", "line2": "Line 2", "line3": "Line 3",
+                "line_cd": "Line CD", "juke": "Juke"
             }
             
             for input_id in zone_inputs:

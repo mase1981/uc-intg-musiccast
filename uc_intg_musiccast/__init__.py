@@ -8,6 +8,11 @@ through the Unfolded Circle Remote Two/Three system.
 :license: MPL-2.0, see LICENSE for more details.
 """
 
-__version__ = "1.0.3"
-__author__ = "Meir Miyara"
-__email__ = "meir.miyara@gmail.com"
+try:
+    from ._version import version as __version__
+    from ._version import version_tuple
+except ImportError:
+    __version__ = "unknown version"
+    version_tuple = (0, 0, "unknown version")
+
+__all__ = ["__version__", "version_tuple"]
