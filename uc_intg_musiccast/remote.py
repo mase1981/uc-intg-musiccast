@@ -17,17 +17,17 @@ from uc_intg_musiccast.client import YamahaMusicCastClient
 _LOG = logging.getLogger(__name__)
 
 class MusicCastRemote(Remote):
-    """Remote entity for Yamaha MusicCast devices with multi-device support."""
+    """Remote entity for Yamaha MusicCast devices."""
 
-    def __init__(self, entity_id: str, device_name: str):
-        """Initialize the remote entity with custom entity ID for multi-device support."""
+    def __init__(self, device_id: str, device_name: str):
+        """Initialize the remote entity."""
         features = [Features.SEND_CMD]
         attributes = {Attributes.STATE: States.ON}
         simple_commands, ui_pages = self._build_ui()
 
         super().__init__(
-            identifier=entity_id,  # Use provided entity_id for multi-device support
-            name=f"{device_name} Remote",  # Each device gets its own name
+            identifier=f"{device_id}_remote",
+            name=f"{device_name} Remote",
             features=features,
             attributes=attributes,
             simple_commands=simple_commands,
@@ -51,7 +51,7 @@ class MusicCastRemote(Remote):
         if self._capabilities_initialized:
             return
             
-        _LOG.info("Initializing MusicCast remote capabilities for %s", self.id)
+        _LOG.info("Initializing MusicCast remote capabilities")
         
         if self._client:
             try:
@@ -70,10 +70,10 @@ class MusicCastRemote(Remote):
                     self.options["simple_commands"] = simple_commands
                     self.options["user_interface"] = {"pages": ui_pages}
                 
-                _LOG.info(f"Remote initialized with {len(self._available_sources)} sources and {len(sound_programs)} sound programs for {self.id}")
+                _LOG.info(f"Remote initialized with {len(self._available_sources)} sources and {len(sound_programs)} sound programs")
                 
             except Exception as e:
-                _LOG.error(f"Failed to initialize remote capabilities for {self.id}: {e}")
+                _LOG.error(f"Failed to initialize remote capabilities: {e}")
         
         self.attributes[Attributes.STATE] = States.ON
         self._force_integration_update()
@@ -94,13 +94,14 @@ class MusicCastRemote(Remote):
                     self.id, self.attributes
                 )
             except Exception as e:
-                _LOG.debug("Could not update integration API for %s: %s", self.id, e)
+                _LOG.debug("Could not update integration API: %s", e)
 
     def _build_ui(self) -> (List[str], List[Dict[str, Any]]):
         """Build basic UI for initial setup."""
         commands = [
             'play', 'pause', 'stop', 'next', 'previous', 'volume_up', 'volume_down',
-            'mute_toggle', 'power_on', 'power_off', 'power_toggle', 'play_pause'
+            'mute_toggle', 'power_on', 'power_off', 'power_toggle', 'play_pause',
+            'repeat_toggle', 'shuffle_toggle'
         ]
 
         pages = [
@@ -117,6 +118,8 @@ class MusicCastRemote(Remote):
                     {'type': 'text', 'location': {'x': 2, 'y': 1}, 'text': 'MUTE', 'command': {'cmd_id': 'send_cmd', 'params': {'command': 'mute_toggle'}}},
                     {'type': 'text', 'location': {'x': 3, 'y': 1}, 'text': 'STOP', 'command': {'cmd_id': 'send_cmd', 'params': {'command': 'stop'}}},
                     {'type': 'text', 'location': {'x': 0, 'y': 2}, 'text': 'POWER', 'command': {'cmd_id': 'send_cmd', 'params': {'command': 'power_toggle'}}},
+                    {'type': 'text', 'location': {'x': 1, 'y': 2}, 'text': 'REPEAT', 'command': {'cmd_id': 'send_cmd', 'params': {'command': 'repeat_toggle'}}},
+                    {'type': 'text', 'location': {'x': 2, 'y': 2}, 'text': 'SHUFFLE', 'command': {'cmd_id': 'send_cmd', 'params': {'command': 'shuffle_toggle'}}},
                 ]
             }
         ]
@@ -132,8 +135,9 @@ class MusicCastRemote(Remote):
             'power_on', 'power_off', 'power_toggle',
             # Volume
             'volume_up', 'volume_down', 'mute_toggle',
-            # Repeat and shuffle
-            'repeat_off', 'repeat_one', 'repeat_all', 'shuffle_off', 'shuffle_on'
+            # Repeat and shuffle with toggle support
+            'repeat_off', 'repeat_one', 'repeat_all', 'repeat_toggle',
+            'shuffle_off', 'shuffle_on', 'shuffle_toggle'
         ]
 
         # Add input commands for available sources
@@ -144,10 +148,14 @@ class MusicCastRemote(Remote):
         for program in self._available_sound_programs:
             commands.append(f"sound_{program}")
 
+        # Add preset/favorites commands (1-40)
+        for preset_num in range(1, 41):
+            commands.append(f"preset_{preset_num}")
+
         # Build enhanced UI pages
         pages = []
 
-        # Main control page
+        # Main control page with toggle buttons
         pages.append({
             'page_id': 'main',
             'name': 'Main Controls',
@@ -163,6 +171,8 @@ class MusicCastRemote(Remote):
                 {'type': 'text', 'location': {'x': 3, 'y': 1}, 'text': 'STOP', 'command': {'cmd_id': 'send_cmd', 'params': {'command': 'stop'}}},
                 {'type': 'text', 'location': {'x': 0, 'y': 2}, 'text': 'REPEAT', 'command': {'cmd_id': 'send_cmd', 'params': {'command': 'repeat_toggle'}}},
                 {'type': 'text', 'location': {'x': 1, 'y': 2}, 'text': 'SHUFFLE', 'command': {'cmd_id': 'send_cmd', 'params': {'command': 'shuffle_toggle'}}},
+                {'type': 'text', 'location': {'x': 2, 'y': 2}, 'text': 'THUMBS+', 'command': {'cmd_id': 'send_cmd', 'params': {'command': 'thumbs_up'}}},
+                {'type': 'text', 'location': {'x': 3, 'y': 2}, 'text': 'THUMBS-', 'command': {'cmd_id': 'send_cmd', 'params': {'command': 'thumbs_down'}}},
             ]
         })
 
@@ -248,6 +258,84 @@ class MusicCastRemote(Remote):
                 'items': sound_items
             })
 
+        # Favorites/Presets page (first 16 presets)
+        preset_items = []
+        x, y = 0, 0
+        
+        for preset_num in range(1, 17):  # First 16 presets on 4x4 grid
+            if x >= 4:
+                x = 0
+                y += 1
+                if y >= 4:
+                    break
+            
+            preset_items.append({
+                'type': 'text',
+                'location': {'x': x, 'y': y},
+                'text': f"FAV{preset_num}",
+                'command': {'cmd_id': 'send_cmd', 'params': {'command': f"preset_{preset_num}"}}
+            })
+            x += 1
+
+        pages.append({
+            'page_id': 'favorites',
+            'name': 'Favorites 1-16',
+            'grid': {'width': 4, 'height': 6},
+            'items': preset_items
+        })
+
+        # Additional favorites page (17-32)
+        preset_items_2 = []
+        x, y = 0, 0
+        
+        for preset_num in range(17, 33):  # Next 16 presets
+            if x >= 4:
+                x = 0
+                y += 1
+                if y >= 4:
+                    break
+            
+            preset_items_2.append({
+                'type': 'text',
+                'location': {'x': x, 'y': y},
+                'text': f"FAV{preset_num}",
+                'command': {'cmd_id': 'send_cmd', 'params': {'command': f"preset_{preset_num}"}}
+            })
+            x += 1
+
+        pages.append({
+            'page_id': 'favorites2',
+            'name': 'Favorites 17-32',
+            'grid': {'width': 4, 'height': 6},
+            'items': preset_items_2
+        })
+
+        # Final favorites page (33-40, plus some empty slots)
+        preset_items_3 = []
+        x, y = 0, 0
+        
+        for preset_num in range(33, 41):  # Final 8 presets
+            if x >= 4:
+                x = 0
+                y += 1
+                if y >= 4:
+                    break
+            
+            preset_items_3.append({
+                'type': 'text',
+                'location': {'x': x, 'y': y},
+                'text': f"FAV{preset_num}",
+                'command': {'cmd_id': 'send_cmd', 'params': {'command': f"preset_{preset_num}"}}
+            })
+            x += 1
+
+        pages.append({
+            'page_id': 'favorites3',
+            'name': 'Favorites 33-40',
+            'grid': {'width': 4, 'height': 6},
+            'items': preset_items_3
+        })
+
         return commands, pages
 
     async def _handle_command(self, entity, cmd_id: str, params: dict = None) -> ucapi.StatusCodes:
@@ -258,7 +346,7 @@ class MusicCastRemote(Remote):
         try:
             command = params.get('command') if params else None
             if cmd_id == "send_cmd" and command:
-                _LOG.info(f"Executing remote command for {self.id}: {command}")
+                _LOG.info(f"Executing remote command: {command}")
                 
                 # Playback commands
                 if command == 'play_pause':
@@ -280,15 +368,19 @@ class MusicCastRemote(Remote):
                     await self._client.set_power(self._zone, 'standby')
                 elif command == 'power_toggle':
                     await self._client.set_power(self._zone, 'toggle')
-                # Volume commands
+                # Volume commands with R-N803D specific format
                 elif command == 'volume_up':
-                    await self._client.set_volume(self._zone, step=1)
+                    await self._client.set_volume(self._zone, direction="up", step=4)
                 elif command == 'volume_down':
-                    await self._client.set_volume(self._zone, step=-1)
+                    await self._client.set_volume(self._zone, direction="down", step=4)
                 elif command == 'mute_toggle':
+                    status = await self._client.get_status(self._zone)
+                    if status.power == "standby":
+                        await self._client.set_power(self._zone, 'on')
+                        await asyncio.sleep(1)
                     current_mute = self._get_current_mute_state()
                     await self._client.set_mute(self._zone, enable=not current_mute)
-                # Repeat/Shuffle commands
+                # Enhanced Repeat/Shuffle commands with toggle support
                 elif command == 'repeat_off':
                     await self._client.set_repeat('off')
                 elif command == 'repeat_one':
@@ -296,24 +388,31 @@ class MusicCastRemote(Remote):
                 elif command == 'repeat_all':
                     await self._client.set_repeat('all')
                 elif command == 'repeat_toggle':
-                    # Cycle through repeat modes
-                    current_repeat = self._get_current_repeat_state()
-                    next_repeat = {'off': 'all', 'all': 'one', 'one': 'off'}.get(current_repeat, 'off')
-                    await self._client.set_repeat(next_repeat)
+                    # Use native toggle if available, otherwise cycle through modes
+                    if hasattr(self._client, 'toggle_repeat'):
+                        await self._client.toggle_repeat()
+                    else:
+                        current_repeat = self._get_current_repeat_state()
+                        next_repeat = {'off': 'all', 'all': 'one', 'one': 'off'}.get(current_repeat, 'off')
+                        await self._client.set_repeat(next_repeat)
                 elif command == 'shuffle_off':
                     await self._client.set_shuffle('off')
                 elif command == 'shuffle_on':
                     await self._client.set_shuffle('on')
                 elif command == 'shuffle_toggle':
-                    current_shuffle = self._get_current_shuffle_state()
-                    await self._client.set_shuffle('off' if current_shuffle else 'on')
+                    # Use native toggle if available, otherwise toggle between on/off
+                    if hasattr(self._client, 'toggle_shuffle'):
+                        await self._client.toggle_shuffle()
+                    else:
+                        current_shuffle = self._get_current_shuffle_state()
+                        await self._client.set_shuffle('off' if current_shuffle else 'on')
                 # Input commands (dynamic based on device capabilities)
                 elif command.startswith('input_'):
                     input_id = command[6:]  # Remove 'input_' prefix
                     if any(src['id'] == input_id for src in self._available_sources):
                         await self._client.set_input(self._zone, input_id)
                     else:
-                        _LOG.warning(f"Input not available: {input_id} for {self.id}")
+                        _LOG.warning(f"Input not available: {input_id}")
                         return ucapi.StatusCodes.BAD_REQUEST
                 # Sound program commands (dynamic based on device capabilities)
                 elif command.startswith('sound_'):
@@ -321,10 +420,31 @@ class MusicCastRemote(Remote):
                     if program_id in self._available_sound_programs:
                         await self._client.set_sound_program(self._zone, program_id)
                     else:
-                        _LOG.warning(f"Sound program not available: {program_id} for {self.id}")
+                        _LOG.warning(f"Sound program not available: {program_id}")
                         return ucapi.StatusCodes.BAD_REQUEST
+                # Preset/Favorites commands (1-40)
+                elif command.startswith('preset_'):
+                    preset_num_str = command[7:]  # Remove 'preset_' prefix
+                    try:
+                        preset_num = int(preset_num_str)
+                        if 1 <= preset_num <= 40:
+                            await self._client.recall_preset(self._zone, preset_num)
+                        else:
+                            _LOG.warning(f"Invalid preset number: {preset_num}")
+                            return ucapi.StatusCodes.BAD_REQUEST
+                    except ValueError:
+                        _LOG.warning(f"Invalid preset command format: {command}")
+                        return ucapi.StatusCodes.BAD_REQUEST
+                # Thumbs up/down commands
+                elif command == 'thumbs_up':
+                    await self._client.manage_play('thumbs_up')
+                elif command == 'thumbs_down':
+                    await self._client.manage_play('thumbs_down')
+                # List navigation commands
+                elif command == 'list_return':
+                    await self._client.set_list_control('main', 'return', zone=self._zone)
                 else:
-                    _LOG.warning(f"Unhandled remote command: {command} for {self.id}")
+                    _LOG.warning(f"Unhandled remote command: {command}")
                     return ucapi.StatusCodes.NOT_IMPLEMENTED
                 
                 asyncio.create_task(self._deferred_update())
@@ -333,58 +453,46 @@ class MusicCastRemote(Remote):
                 return ucapi.StatusCodes.BAD_REQUEST
 
         except Exception as e:
-            _LOG.error(f"Error executing command {params} for {self.id}: {e}")
+            _LOG.error(f"Error executing command {params}: {e}")
             return ucapi.StatusCodes.SERVER_ERROR
 
     def _get_current_mute_state(self) -> bool:
         """Helper to safely get mute state from parent media player."""
         try:
             if self._integration_api and hasattr(self._integration_api, 'configured_entities'):
-                # Find corresponding media player entity
-                mp_entity_id = self.id.replace('_remote', '_media_player')
-                mp_entity = None
-                for entity in self._integration_api.configured_entities._entities:
-                    if entity.id == mp_entity_id:
-                        mp_entity = entity
-                        break
+                mp_entity = self._integration_api.configured_entities.get(
+                    self.id.replace('_remote', '_media_player')
+                )
                 if mp_entity:
                     return mp_entity.attributes.get('muted', False)
         except Exception as e:
-            _LOG.debug(f"Could not get mute state for {self.id}: {e}")
+            _LOG.debug(f"Could not get mute state: {e}")
         return False
 
     def _get_current_repeat_state(self) -> str:
         """Helper to get current repeat state."""
         try:
             if self._integration_api and hasattr(self._integration_api, 'configured_entities'):
-                # Find corresponding media player entity
-                mp_entity_id = self.id.replace('_remote', '_media_player')
-                mp_entity = None
-                for entity in self._integration_api.configured_entities._entities:
-                    if entity.id == mp_entity_id:
-                        mp_entity = entity
-                        break
+                mp_entity = self._integration_api.configured_entities.get(
+                    self.id.replace('_remote', '_media_player')
+                )
                 if mp_entity:
                     return mp_entity.attributes.get('repeat', 'off')
         except Exception as e:
-            _LOG.debug(f"Could not get repeat state for {self.id}: {e}")
+            _LOG.debug(f"Could not get repeat state: {e}")
         return 'off'
 
     def _get_current_shuffle_state(self) -> bool:
         """Helper to get current shuffle state."""
         try:
             if self._integration_api and hasattr(self._integration_api, 'configured_entities'):
-                # Find corresponding media player entity
-                mp_entity_id = self.id.replace('_remote', '_media_player')
-                mp_entity = None
-                for entity in self._integration_api.configured_entities._entities:
-                    if entity.id == mp_entity_id:
-                        mp_entity = entity
-                        break
+                mp_entity = self._integration_api.configured_entities.get(
+                    self.id.replace('_remote', '_media_player')
+                )
                 if mp_entity:
                     return mp_entity.attributes.get('shuffle', False)
         except Exception as e:
-            _LOG.debug(f"Could not get shuffle state for {self.id}: {e}")
+            _LOG.debug(f"Could not get shuffle state: {e}")
         return False
 
     async def _deferred_update(self):
@@ -392,14 +500,10 @@ class MusicCastRemote(Remote):
         await asyncio.sleep(0.5)
         try:
             if self._integration_api and hasattr(self._integration_api, 'configured_entities'):
-                # Find corresponding media player entity
-                mp_entity_id = self.id.replace('_remote', '_media_player')
-                mp_entity = None
-                for entity in self._integration_api.configured_entities._entities:
-                    if entity.id == mp_entity_id:
-                        mp_entity = entity
-                        break
+                mp_entity = self._integration_api.configured_entities.get(
+                    self.id.replace('_remote', '_media_player')
+                )
                 if mp_entity and hasattr(mp_entity, 'update_attributes'):
                     await mp_entity.update_attributes()
         except Exception as e:
-            _LOG.error(f"Could not trigger deferred update for media player from {self.id}: {e}")
+            _LOG.error(f"Could not trigger deferred update for media player: {e}")

@@ -2,17 +2,6 @@
 """
 Yamaha MusicCast Device Discovery Script
 
-This script connects to your MusicCast device and exports comprehensive
-API data to help improve the integration. No external dependencies required.
-
-Usage:
-    python musiccast_device_discovery.py
-
-The script will:
-1. Ask for your MusicCast device IP address
-2. Connect and query all available API endpoints
-3. Generate a detailed report file
-4. Create an export file you can share with the developer
 
 :copyright: (c) 2025 by Meir Miyara
 :license: MPL-2.0, see LICENSE for more details.
@@ -28,8 +17,8 @@ from urllib.error import URLError, HTTPError
 from urllib.parse import urlencode
 
 
-class MusicCastDiscovery:
-    """Comprehensive MusicCast device API discovery."""
+class EnhancedMusicCastDiscovery:
+    """Enhanced MusicCast device API discovery with working command detection."""
     
     def __init__(self):
         self.device_ip = None
@@ -38,9 +27,11 @@ class MusicCastDiscovery:
         self.device_info = {}
         self.discovery_data = {
             "timestamp": datetime.now().isoformat(),
-            "script_version": "1.0.0",
+            "script_version": "2.0.0",
             "device_info": {},
             "api_responses": {},
+            "working_commands": {},  # New: Store actual working commands
+            "command_formats": {},   # New: Store parameter formats that work
             "errors": [],
             "warnings": [],
             "summary": {}
@@ -49,22 +40,16 @@ class MusicCastDiscovery:
     def print_header(self):
         """Print script header."""
         print("=" * 70)
-        print("🎵 Yamaha MusicCast Device Discovery Script")
+        print("🎵 Enhanced Yamaha MusicCast Device Discovery Script v2.0")
         print("=" * 70)
-        print("This script will connect to your MusicCast device and")
-        print("export comprehensive API data to help improve the integration.")
+        print("This enhanced script discovers working command formats")
+        print("to improve integration compatibility without guesswork.")
         print()
-        print("What this script does:")
-        print("• Connects to your MusicCast device")
-        print("• Queries all available API endpoints")
-        print("• Tests device capabilities and features")
-        print("• Generates a detailed report for developers")
-        print("• Creates an export file you can share")
-        print()
-        print("Requirements:")
-        print("• Python 3.6+ (already installed)")
-        print("• MusicCast device on same network")
-        print("• Device IP address")
+        print("New features:")
+        print("• Tests actual parameter combinations")
+        print("• Captures working HTTP command formats")
+        print("• Provides copy-paste ready commands")
+        print("• Enhanced error analysis")
         print("=" * 70)
         print()
     
@@ -132,7 +117,7 @@ class MusicCastDiscovery:
         
         try:
             request = Request(url)
-            request.add_header('User-Agent', 'MusicCast-Discovery/1.0')
+            request.add_header('User-Agent', 'Enhanced-MusicCast-Discovery/2.0')
             
             with urlopen(request, timeout=timeout) as response:
                 data = response.read().decode('utf-8')
@@ -142,6 +127,7 @@ class MusicCastDiscovery:
             error_msg = f"HTTP {e.code}: {e.reason}"
             self.discovery_data["errors"].append({
                 "endpoint": endpoint,
+                "params": params,
                 "error": error_msg,
                 "type": "http_error"
             })
@@ -151,6 +137,7 @@ class MusicCastDiscovery:
             error_msg = f"URL Error: {e.reason}"
             self.discovery_data["errors"].append({
                 "endpoint": endpoint,
+                "params": params,
                 "error": error_msg,
                 "type": "url_error"
             })
@@ -160,6 +147,7 @@ class MusicCastDiscovery:
             error_msg = f"JSON Decode Error: {e}"
             self.discovery_data["errors"].append({
                 "endpoint": endpoint,
+                "params": params,
                 "error": error_msg,
                 "type": "json_error"
             })
@@ -169,398 +157,298 @@ class MusicCastDiscovery:
             error_msg = f"Unexpected error: {e}"
             self.discovery_data["errors"].append({
                 "endpoint": endpoint,
+                "params": params,
                 "error": error_msg,
                 "type": "unknown_error"
             })
             return None
     
-    def discover_system_endpoints(self):
-        """Discover system-level API endpoints."""
-        print("\n🔍 Discovering system endpoints...")
+    def test_volume_command_formats(self):
+        """Test different volume command parameter formats."""
+        print("\n🔊 Testing volume command formats...")
         
-        system_endpoints = [
-            "system/getDeviceInfo",
-            "system/getFeatures",
-            "system/getNetworkStatus",
-            "system/getFuncStatus",
-            "system/setAutoPowerStandby",
-            "system/getLocationInfo",
-            "system/sendIrCode",
-            "system/setWiredLan",
-            "system/setWirelessLan",
-            "system/setWirelessDirect",
-            "system/setIpSettings",
-            "system/setNetworkName",
-            "system/getAccountStatus",
-            "system/switchAccount",
-            "system/getMusicCastStatus",
-            "system/getSignalInfo",
-            "system/setSpeakerPattern",
-            "system/getSpeakerPattern"
+        working_formats = []
+        
+        # Test various volume parameter combinations
+        volume_tests = [
+            # Standard integration formats
+            {"step": 1},
+            {"step": -1},
+            {"step": 4},
+            {"step": -4},
+            {"volume": 50},
+            
+            # R-N803D specific formats (from user report)
+            {"volume": "up", "step": 4},
+            {"volume": "down", "step": 4},
+            {"volume": "up", "step": 1},
+            {"volume": "down", "step": 1},
+            
+            # Other possible formats
+            {"direction": "up"},
+            {"direction": "down"},
+            {"volume": "up"},
+            {"volume": "down"},
+            {"cmd": "up"},
+            {"cmd": "down"},
         ]
         
-        for endpoint in system_endpoints:
-            short_name = endpoint.split('/')[-1]
-            print(f"  📡 Testing {short_name}...", end="")
+        for params in volume_tests:
+            print(f"  📝 Testing volume params: {params}...", end="")
+            response = self.make_request("main/setVolume", params)
             
-            response = self.make_request(endpoint)
-            if response:
-                self.discovery_data["api_responses"][endpoint] = response
-                print(" ✅")
-            else:
-                print(" ❌")
-    
-    def discover_zone_endpoints(self):
-        """Discover zone-specific API endpoints."""
-        print("\n🔍 Discovering zone endpoints...")
-        
-        # Common zones to test
-        zones = ["main", "zone2", "zone3", "zone4"]
-        
-        zone_endpoints = [
-            "getStatus",
-            "getSignalInfo", 
-            "setSleep",
-            "setPower",
-            "setVolume",
-            "setMute",
-            "setInput",
-            "setSoundProgram",
-            "setPureDirect",
-            "setEnhancer",
-            "setToneControl",
-            "setEqualizer",
-            "setBalance",
-            "setSubwooferVolume",
-            "setBassExtension",
-            "setClearVoice",
-            "set3dSurround",
-            "setDirectMode",
-            "setExtraBass",
-            "setAdaptiveDrc",
-            "setBassBoost",
-            "setMusicBoost",
-            "setSurroundDecoder",
-            "setDtsDialog",
-            "setContentsDisplay",
-            "setPartyMode",
-            "getPresetInfo",
-            "recallPreset",
-            "storePreset",
-            "setAutoPreset",
-            "setSpeaker",
-            "setDimmer",
-            "setZoneBgm"
-        ]
-        
-        for zone in zones:
-            print(f"  🎛️  Testing zone: {zone}")
-            zone_responses = {}
-            
-            for endpoint in zone_endpoints:
-                full_endpoint = f"{zone}/{endpoint}"
-                response = self.make_request(full_endpoint)
-                if response:
-                    zone_responses[endpoint] = response
-            
-            if zone_responses:
-                self.discovery_data["api_responses"][f"zone_{zone}"] = zone_responses
-                print(f"    ✅ Found {len(zone_responses)} working endpoints")
-            else:
-                print(f"    ❌ No working endpoints found")
-    
-    def discover_netusb_endpoints(self):
-        """Discover network/USB media endpoints."""
-        print("\n🔍 Discovering NetUSB/Media endpoints...")
-        
-        netusb_endpoints = [
-            "netusb/getPlayInfo",
-            "netusb/setPlayback",
-            "netusb/setRepeat", 
-            "netusb/setShuffle",
-            "netusb/getListInfo",
-            "netusb/setListControl",
-            "netusb/setSearchString",
-            "netusb/getSearchResult",
-            "netusb/getRecentInfo",
-            "netusb/clearRecentInfo",
-            "netusb/setRecentControl",
-            "netusb/getPresetInfo",
-            "netusb/recallPreset",
-            "netusb/storePreset",
-            "netusb/managePlay",
-            "netusb/getSettings",
-            "netusb/setSettings",
-            "netusb/getServiceInfo",
-            "netusb/setServiceControl",
-            "netusb/getAccountStatus",
-            "netusb/switchAccount",
-            "netusb/getMcPlaylist",
-            "netusb/setMcPlaylist",
-            "netusb/setBrowseFilter",
-            "netusb/getPlayQueue",
-            "netusb/setPlayQueue"
-        ]
-        
-        working_endpoints = 0
-        for endpoint in netusb_endpoints:
-            short_name = endpoint.split('/')[-1]
-            print(f"  🎵 Testing {short_name}...", end="")
-            
-            response = self.make_request(endpoint)
-            if response:
-                self.discovery_data["api_responses"][endpoint] = response
-                working_endpoints += 1
-                print(" ✅")
-            else:
-                print(" ❌")
-        
-        print(f"  📊 NetUSB endpoints: {working_endpoints}/{len(netusb_endpoints)} working")
-    
-    def discover_tuner_endpoints(self):
-        """Discover tuner-specific endpoints."""
-        print("\n🔍 Discovering Tuner endpoints...")
-        
-        tuner_endpoints = [
-            "tuner/getPlayInfo",
-            "tuner/setFreq",
-            "tuner/recallPreset",
-            "tuner/storePreset",
-            "tuner/setDabService",
-            "tuner/getDabServiceList",
-            "tuner/setFmFreq",
-            "tuner/setAmFreq",
-            "tuner/startDabInitialScan",
-            "tuner/startDabAutoPreset",
-            "tuner/setDabPreset",
-            "tuner/getDabPresetInfo"
-        ]
-        
-        working_endpoints = 0
-        for endpoint in tuner_endpoints:
-            short_name = endpoint.split('/')[-1]
-            print(f"  📻 Testing {short_name}...", end="")
-            
-            response = self.make_request(endpoint)
-            if response:
-                self.discovery_data["api_responses"][endpoint] = response
-                working_endpoints += 1
-                print(" ✅")
-            else:
-                print(" ❌")
-        
-        print(f"  📊 Tuner endpoints: {working_endpoints}/{len(tuner_endpoints)} working")
-    
-    def discover_clock_endpoints(self):
-        """Discover clock/timer endpoints."""
-        print("\n🔍 Discovering Clock/Timer endpoints...")
-        
-        clock_endpoints = [
-            "clock/getSettings",
-            "clock/setSettings",
-            "clock/setDateAndTime",
-            "clock/setClockFormat",
-            "clock/setAlarmSettings",
-            "clock/getAlarmSettings",
-            "clock/setSleepTimer",
-            "clock/getSleepTimer"
-        ]
-        
-        working_endpoints = 0
-        for endpoint in clock_endpoints:
-            short_name = endpoint.split('/')[-1]
-            print(f"  ⏰ Testing {short_name}...", end="")
-            
-            response = self.make_request(endpoint)
-            if response:
-                self.discovery_data["api_responses"][endpoint] = response
-                working_endpoints += 1
-                print(" ✅")
-            else:
-                print(" ❌")
-        
-        print(f"  📊 Clock endpoints: {working_endpoints}/{len(clock_endpoints)} working")
-    
-    def test_special_features(self):
-        """Test device-specific special features."""
-        print("\n🔍 Testing special device features...")
-        
-        # Test MusicCast link capabilities
-        print("  🔗 Testing MusicCast Link...")
-        link_response = self.make_request("dist/getDistributionInfo")
-        if link_response:
-            self.discovery_data["api_responses"]["musiccast_link"] = link_response
-            print("    ✅ MusicCast Link supported")
-        else:
-            print("    ❌ MusicCast Link not available")
-        
-        # Test CD player if available
-        print("  💿 Testing CD player...")
-        cd_response = self.make_request("cd/getPlayInfo")
-        if cd_response:
-            self.discovery_data["api_responses"]["cd_player"] = cd_response
-            print("    ✅ CD player detected")
-        else:
-            print("    ❌ CD player not available")
-        
-        # Test streaming services
-        print("  🌐 Testing streaming services...")
-        streaming_services = ["spotify", "pandora", "sirius", "tidal", "deezer", "amazon_music"]
-        detected_services = []
-        
-        for service in streaming_services:
-            # Try to get service-specific info
-            response = self.make_request(f"netusb/getAccountStatus", {"input": service})
             if response and response.get("response_code") == 0:
-                detected_services.append(service)
+                working_formats.append({
+                    "endpoint": "main/setVolume",
+                    "params": params,
+                    "http_command": f"{self.api_base}/main/setVolume?{urlencode(params)}",
+                    "response": response
+                })
+                print(" ✅")
+            else:
+                error_code = response.get("response_code", "No response") if response else "No response"
+                print(f" ❌ (code: {error_code})")
         
-        if detected_services:
-            self.discovery_data["streaming_services"] = detected_services
-            print(f"    ✅ Detected services: {', '.join(detected_services)}")
+        if working_formats:
+            self.discovery_data["working_commands"]["volume"] = working_formats
+            print(f"  📊 Found {len(working_formats)} working volume formats")
         else:
-            print("    ❌ No streaming services detected")
+            print("  ⚠️  No working volume formats found")
     
-    def analyze_capabilities(self):
-        """Analyze device capabilities based on discovered data."""
-        print("\n📊 Analyzing device capabilities...")
+    def test_playback_command_formats(self):
+        """Test different playback command parameter formats."""
+        print("\n▶️ Testing playback command formats...")
         
-        capabilities = {
-            "zones": [],
-            "inputs": [],
-            "sound_programs": [],
-            "streaming_services": [],
-            "special_features": [],
-            "api_coverage": {}
-        }
+        working_formats = []
         
-        # Analyze zones
-        for key in self.discovery_data["api_responses"]:
-            if key.startswith("zone_"):
-                zone_name = key.replace("zone_", "")
-                capabilities["zones"].append(zone_name)
-        
-        # Analyze features from getFeatures response
-        features_response = self.discovery_data["api_responses"].get("system/getFeatures")
-        if features_response:
-            if "zone" in features_response:
-                for zone in features_response["zone"]:
-                    if "input_list" in zone:
-                        capabilities["inputs"].extend(zone["input_list"])
-                    if "sound_program_list" in zone:
-                        capabilities["sound_programs"].extend(zone["sound_program_list"])
+        # Test various playback parameter combinations
+        playback_tests = [
+            # Standard formats
+            {"playback": "play"},
+            {"playback": "pause"},
+            {"playback": "stop"},
+            {"playback": "toggle"},
+            {"playback": "next"},
+            {"playback": "previous"},
             
-            if "system" in features_response:
-                if "input_list" in features_response["system"]:
-                    for input_info in features_response["system"]["input_list"]:
-                        if isinstance(input_info, dict) and "id" in input_info:
-                            capabilities["inputs"].append(input_info["id"])
+            # Alternative parameter names
+            {"cmd": "play"},
+            {"cmd": "pause"},
+            {"cmd": "toggle"},
+            {"action": "play"},
+            {"action": "pause"},
+            {"control": "play"},
+            {"control": "pause"},
+        ]
         
-        # Count API coverage
-        total_endpoints = len(self.discovery_data["api_responses"])
-        total_errors = len(self.discovery_data["errors"])
+        for params in playback_tests:
+            print(f"  📝 Testing playback params: {params}...", end="")
+            response = self.make_request("netusb/setPlayback", params)
+            
+            if response and response.get("response_code") == 0:
+                working_formats.append({
+                    "endpoint": "netusb/setPlayback",
+                    "params": params,
+                    "http_command": f"{self.api_base}/netusb/setPlayback?{urlencode(params)}",
+                    "response": response
+                })
+                print(" ✅")
+            else:
+                error_code = response.get("response_code", "No response") if response else "No response"
+                print(f" ❌ (code: {error_code})")
         
-        capabilities["api_coverage"] = {
-            "working_endpoints": total_endpoints,
-            "failed_endpoints": total_errors,
-            "success_rate": f"{(total_endpoints / (total_endpoints + total_errors) * 100):.1f}%" if (total_endpoints + total_errors) > 0 else "0%"
-        }
-        
-        # Remove duplicates
-        capabilities["inputs"] = list(set(capabilities["inputs"]))
-        capabilities["sound_programs"] = list(set(capabilities["sound_programs"]))
-        
-        self.discovery_data["capabilities"] = capabilities
-        
-        print(f"  🎛️  Zones detected: {len(capabilities['zones'])}")
-        print(f"  🔌 Inputs available: {len(capabilities['inputs'])}")
-        print(f"  🎵 Sound programs: {len(capabilities['sound_programs'])}")
-        print(f"  📡 API coverage: {capabilities['api_coverage']['success_rate']}")
+        if working_formats:
+            self.discovery_data["working_commands"]["playback"] = working_formats
+            print(f"  📊 Found {len(working_formats)} working playback formats")
+        else:
+            print("  ⚠️  No working playback formats found")
     
-    def generate_summary(self):
-        """Generate discovery summary."""
-        device_info = self.discovery_data["api_responses"].get("system/getDeviceInfo", {})
+    def test_repeat_shuffle_formats(self):
+        """Test repeat and shuffle command formats."""
+        print("\n🔁 Testing repeat/shuffle command formats...")
         
-        summary = {
-            "device_model": device_info.get("model_name", "Unknown"),
-            "device_id": device_info.get("device_id", "Unknown"),
-            "system_version": device_info.get("system_version", "Unknown"),
-            "api_version": device_info.get("api_version", "Unknown"),
-            "discovery_timestamp": self.discovery_data["timestamp"],
-            "total_endpoints_tested": len(self.discovery_data["api_responses"]) + len(self.discovery_data["errors"]),
-            "successful_endpoints": len(self.discovery_data["api_responses"]),
-            "failed_endpoints": len(self.discovery_data["errors"]),
-            "capabilities_found": len(self.discovery_data.get("capabilities", {}).get("inputs", [])),
-            "zones_detected": len(self.discovery_data.get("capabilities", {}).get("zones", [])),
+        working_formats = []
+        
+        # Test repeat commands
+        repeat_tests = [
+            {"repeat": "off"},
+            {"repeat": "one"},
+            {"repeat": "all"},
+        ]
+        
+        shuffle_tests = [
+            {"shuffle": "off"},
+            {"shuffle": "on"},
+        ]
+        
+        # Test repeat
+        for params in repeat_tests:
+            print(f"  📝 Testing repeat params: {params}...", end="")
+            response = self.make_request("netusb/setRepeat", params)
+            
+            if response and response.get("response_code") == 0:
+                working_formats.append({
+                    "endpoint": "netusb/setRepeat",
+                    "params": params,
+                    "http_command": f"{self.api_base}/netusb/setRepeat?{urlencode(params)}",
+                    "response": response
+                })
+                print(" ✅")
+            else:
+                error_code = response.get("response_code", "No response") if response else "No response"
+                print(f" ❌ (code: {error_code})")
+        
+        # Test shuffle
+        for params in shuffle_tests:
+            print(f"  📝 Testing shuffle params: {params}...", end="")
+            response = self.make_request("netusb/setShuffle", params)
+            
+            if response and response.get("response_code") == 0:
+                working_formats.append({
+                    "endpoint": "netusb/setShuffle",
+                    "params": params,
+                    "http_command": f"{self.api_base}/netusb/setShuffle?{urlencode(params)}",
+                    "response": response
+                })
+                print(" ✅")
+            else:
+                error_code = response.get("response_code", "No response") if response else "No response"
+                print(f" ❌ (code: {error_code})")
+        
+        # Test toggle endpoints
+        toggle_tests = [
+            ("netusb/toggleRepeat", {}),
+            ("netusb/toggleShuffle", {}),
+        ]
+        
+        for endpoint, params in toggle_tests:
+            print(f"  📝 Testing {endpoint}...", end="")
+            response = self.make_request(endpoint, params)
+            
+            if response and response.get("response_code") == 0:
+                working_formats.append({
+                    "endpoint": endpoint,
+                    "params": params,
+                    "http_command": f"{self.api_base}/{endpoint}",
+                    "response": response
+                })
+                print(" ✅")
+            else:
+                error_code = response.get("response_code", "No response") if response else "No response"
+                print(f" ❌ (code: {error_code})")
+        
+        if working_formats:
+            self.discovery_data["working_commands"]["repeat_shuffle"] = working_formats
+            print(f"  📊 Found {len(working_formats)} working repeat/shuffle formats")
+        else:
+            print("  ⚠️  No working repeat/shuffle formats found")
+    
+    def generate_integration_recommendations(self):
+        """Generate recommendations for integration enhancement."""
+        print("\n💡 Analyzing results for integration recommendations...")
+        
+        recommendations = {
+            "volume_commands": [],
+            "playback_commands": [],
+            "repeat_shuffle_commands": [],
+            "general_recommendations": []
         }
         
-        self.discovery_data["summary"] = summary
+        # Volume recommendations
+        volume_commands = self.discovery_data["working_commands"].get("volume", [])
+        if volume_commands:
+            recommendations["volume_commands"] = [
+                f"Use: {cmd['http_command']}" for cmd in volume_commands
+            ]
+        else:
+            recommendations["volume_commands"] = [
+                "No working volume commands found - device may require specific power state",
+                "Try testing with device in different power states (on/standby)"
+            ]
+        
+        # Playback recommendations
+        playback_commands = self.discovery_data["working_commands"].get("playback", [])
+        if playback_commands:
+            recommendations["playback_commands"] = [
+                f"Use: {cmd['http_command']}" for cmd in playback_commands
+            ]
+        else:
+            recommendations["playback_commands"] = [
+                "No working playback commands found - check device state and input source"
+            ]
+        
+        # Repeat/Shuffle recommendations
+        repeat_shuffle_commands = self.discovery_data["working_commands"].get("repeat_shuffle", [])
+        if repeat_shuffle_commands:
+            recommendations["repeat_shuffle_commands"] = [
+                f"Use: {cmd['http_command']}" for cmd in repeat_shuffle_commands
+            ]
+        
+        # General recommendations
+        error_rate = len(self.discovery_data["errors"]) / (len(self.discovery_data["api_responses"]) + len(self.discovery_data["errors"])) * 100
+        if error_rate > 50:
+            recommendations["general_recommendations"].append(
+                f"High error rate ({error_rate:.1f}%) - device may have limited API support"
+            )
+        
+        self.discovery_data["integration_recommendations"] = recommendations
     
     def save_results(self):
-        """Save discovery results to files."""
-        print("\n💾 Saving discovery results...")
+        """Save enhanced discovery results."""
+        print("\n💾 Saving enhanced discovery results...")
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        device_model = self.discovery_data["summary"].get("device_model", "Unknown").replace(" ", "_")
+        device_model = self.device_info.get("model_name", "Unknown").replace(" ", "_")
         
-        # Create detailed report filename
-        report_filename = f"musiccast_discovery_{device_model}_{timestamp}.json"
+        # Create enhanced report filename
+        report_filename = f"enhanced_musiccast_discovery_{device_model}_{timestamp}.json"
         
         try:
             with open(report_filename, 'w', encoding='utf-8') as f:
                 json.dump(self.discovery_data, f, indent=2, ensure_ascii=False)
             
-            print(f"✅ Detailed report saved: {report_filename}")
+            print(f"✅ Enhanced report saved: {report_filename}")
             
-            # Create user-friendly summary
-            summary_filename = f"musiccast_summary_{device_model}_{timestamp}.txt"
-            with open(summary_filename, 'w', encoding='utf-8') as f:
-                f.write("🎵 Yamaha MusicCast Device Discovery Summary\n")
+            # Create developer-friendly summary
+            dev_summary_filename = f"musiccast_integration_guide_{device_model}_{timestamp}.txt"
+            with open(dev_summary_filename, 'w', encoding='utf-8') as f:
+                f.write("🎵 MusicCast Integration Developer Guide\n")
                 f.write("=" * 50 + "\n\n")
                 
-                summary = self.discovery_data["summary"]
-                f.write(f"Device Model: {summary['device_model']}\n")
-                f.write(f"Device ID: {summary['device_id']}\n")
-                f.write(f"System Version: {summary['system_version']}\n")
-                f.write(f"API Version: {summary['api_version']}\n")
-                f.write(f"Discovery Date: {summary['discovery_timestamp']}\n\n")
+                f.write(f"Device: {device_model}\n")
+                f.write(f"Discovery Date: {self.discovery_data['timestamp']}\n\n")
                 
-                f.write("📊 API Discovery Results:\n")
-                f.write(f"• Total endpoints tested: {summary['total_endpoints_tested']}\n")
-                f.write(f"• Successful endpoints: {summary['successful_endpoints']}\n")
-                f.write(f"• Failed endpoints: {summary['failed_endpoints']}\n")
-                f.write(f"• Success rate: {(summary['successful_endpoints']/summary['total_endpoints_tested']*100):.1f}%\n\n")
+                # Working commands section
+                f.write("🔧 WORKING HTTP COMMANDS:\n")
+                f.write("-" * 30 + "\n")
                 
-                capabilities = self.discovery_data.get("capabilities", {})
-                if capabilities:
-                    f.write("🎛️  Device Capabilities:\n")
-                    f.write(f"• Zones: {', '.join(capabilities.get('zones', []))}\n")
-                    f.write(f"• Inputs: {', '.join(capabilities.get('inputs', []))}\n")
-                    f.write(f"• Sound Programs: {len(capabilities.get('sound_programs', []))} available\n\n")
+                for category, commands in self.discovery_data["working_commands"].items():
+                    f.write(f"\n{category.title()} Commands:\n")
+                    for cmd in commands:
+                        f.write(f"  • {cmd['http_command']}\n")
                 
-                if self.discovery_data.get("streaming_services"):
-                    f.write(f"🌐 Streaming Services: {', '.join(self.discovery_data['streaming_services'])}\n\n")
+                # Integration recommendations
+                f.write(f"\n💡 INTEGRATION RECOMMENDATIONS:\n")
+                f.write("-" * 30 + "\n")
                 
-                f.write("📁 Files Generated:\n")
-                f.write(f"• Detailed report: {report_filename}\n")
-                f.write(f"• This summary: {summary_filename}\n\n")
+                for category, recs in self.discovery_data.get("integration_recommendations", {}).items():
+                    if recs:
+                        f.write(f"\n{category.replace('_', ' ').title()}:\n")
+                        for rec in recs:
+                            f.write(f"  • {rec}\n")
                 
-                f.write("📤 Next Steps:\n")
-                f.write("1. Send the detailed report file to the developer\n")
-                f.write("2. Include your device model and any special features\n")
-                f.write("3. Mention any functions you'd like to see added\n\n")
-                
-                f.write("Thank you for helping improve the MusicCast integration!\n")
+                f.write(f"\n📋 Copy-paste these working commands for integration testing\n")
             
-            print(f"✅ Summary report saved: {summary_filename}")
+            print(f"✅ Developer guide saved: {dev_summary_filename}")
             
-            return report_filename, summary_filename
+            return report_filename, dev_summary_filename
             
         except Exception as e:
             print(f"❌ Error saving files: {e}")
             return None, None
     
-    def run_discovery(self):
-        """Run complete discovery process."""
+    def run_enhanced_discovery(self):
+        """Run enhanced discovery process."""
         self.print_header()
         
         # Get device IP
@@ -569,62 +457,48 @@ class MusicCastDiscovery:
         
         # Test connection
         if not self.test_connection():
-            print("\n❌ Cannot connect to device. Please check:")
-            print("• Device IP address is correct")
-            print("• Device is powered on and connected to network")
-            print("• Device and computer are on same network")
-            print("• No firewall blocking the connection")
+            print("\n❌ Cannot connect to device. Please check connectivity.")
             return False
         
         # Store device info
         self.discovery_data["device_info"] = self.device_info
         
-        # Run discovery
-        print("\n🚀 Starting comprehensive API discovery...")
-        print("This may take a few minutes...")
+        print("\n🚀 Starting enhanced API discovery...")
+        print("Testing actual command formats to find what works...")
         
-        self.discover_system_endpoints()
-        self.discover_zone_endpoints()
-        self.discover_netusb_endpoints()
-        self.discover_tuner_endpoints()
-        self.discover_clock_endpoints()
-        self.test_special_features()
-        self.analyze_capabilities()
-        self.generate_summary()
+        # Test working command formats
+        self.test_volume_command_formats()
+        self.test_playback_command_formats()
+        self.test_repeat_shuffle_formats()
+        
+        # Generate recommendations
+        self.generate_integration_recommendations()
         
         # Save results
-        report_file, summary_file = self.save_results()
+        report_file, guide_file = self.save_results()
         
-        if report_file and summary_file:
-            print("\n🎉 Discovery completed successfully!")
-            print("\n📋 Summary:")
-            summary = self.discovery_data["summary"]
-            print(f"• Device: {summary['device_model']} ({summary['device_id']})")
-            print(f"• API endpoints found: {summary['successful_endpoints']}")
-            print(f"• Zones detected: {summary['zones_detected']}")
-            print(f"• Input sources: {summary['capabilities_found']}")
+        if report_file and guide_file:
+            print("\n🎉 Enhanced discovery completed!")
+            print(f"\n📄 Files created:")
+            print(f"  • {report_file} (full discovery data)")
+            print(f"  • {guide_file} (developer integration guide)")
             
-            print(f"\n📁 Files created:")
-            print(f"• {report_file} (send this to developer)")
-            print(f"• {summary_file} (human-readable summary)")
+            working_commands_count = sum(len(cmds) for cmds in self.discovery_data["working_commands"].values())
+            print(f"\n📊 Results:")
+            print(f"  • Working commands found: {working_commands_count}")
+            print(f"  • Ready for integration enhancement")
             
-            print(f"\n📤 Next steps:")
-            print(f"1. Send '{report_file}' to the developer")
-            print(f"2. Include device model and any special requests")
-            print(f"3. The developer will use this to enhance the integration")
-            
-            print(f"\nThank you for helping improve the MusicCast integration! 🙏")
             return True
         else:
-            print("\n❌ Discovery completed but failed to save results")
+            print("\n❌ Enhanced discovery completed but failed to save results")
             return False
 
 
 def main():
     """Main entry point."""
     try:
-        discovery = MusicCastDiscovery()
-        success = discovery.run_discovery()
+        discovery = EnhancedMusicCastDiscovery()
+        success = discovery.run_enhanced_discovery()
         
         if success:
             input("\nPress Enter to exit...")
@@ -633,7 +507,7 @@ def main():
             sys.exit(1)
             
     except KeyboardInterrupt:
-        print("\n\n🛑 Discovery cancelled by user")
+        print("\n\n🛑 Enhanced discovery cancelled by user")
         sys.exit(1)
     except Exception as e:
         print(f"\n❌ Unexpected error: {e}")

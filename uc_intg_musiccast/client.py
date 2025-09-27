@@ -223,7 +223,7 @@ class YamahaMusicCastClient:
         return True
     
     async def set_volume(self, zone: str = "main", volume: Optional[int] = None, 
-                        step: Optional[int] = None) -> bool:
+                        step: Optional[int] = None, direction: Optional[str] = None) -> bool:
         """Set volume level or step."""
         params = {}
         if volume is not None:
@@ -241,10 +241,14 @@ class YamahaMusicCastClient:
                         break
             
             params["volume"] = max(0, min(max_vol, volume))
+        elif direction in ["up", "down"]:
+            # R-N803D specific format: volume=up/down&step=4
+            params["volume"] = direction
+            params["step"] = step if step is not None else 4
         elif step is not None:
             params["step"] = step
         else:
-            raise InvalidParameterError("Either volume or step must be provided")
+            raise InvalidParameterError("Either volume, step, or direction must be provided")
         await self._make_request(f"{zone}/setVolume", params)
         return True
     
@@ -314,6 +318,58 @@ class YamahaMusicCastClient:
         await self._make_request("netusb/setShuffle", {"shuffle": shuffle})
         return True
 
+    async def recall_preset(self, zone: str = "main", num: int = 1) -> bool:
+        """Recall a preset (favorites 1-40)."""
+        if not (1 <= num <= 40):
+            raise InvalidParameterError(f"Preset number must be between 1 and 40, got {num}")
+        await self._make_request("netusb/recallPreset", {"zone": zone, "num": num})
+        return True
+
+    async def get_preset_info(self) -> Dict[str, Any]:
+        """Get preset information."""
+        return await self._make_request("netusb/getPresetInfo")
+
+    async def get_list_info(self, list_id: str = "main", input_source: Optional[str] = None, 
+                           size: int = 8, lang: str = "en", index: int = 0) -> Dict[str, Any]:
+        """Get list information for browsing content."""
+        params = {"list_id": list_id, "size": size, "lang": lang, "index": index}
+        if input_source:
+            params["input"] = input_source
+        return await self._make_request("netusb/getListInfo", params)
+
+    async def set_list_control(self, list_id: str = "main", control_type: str = "play", 
+                              index: int = 0, zone: str = "main") -> bool:
+        """Control list playback and navigation."""
+        valid_types = ["play", "select", "return"]
+        if control_type not in valid_types:
+            raise InvalidParameterError(f"Invalid control type: {control_type}. Must be one of {valid_types}")
+        
+        params = {"list_id": list_id, "type": control_type, "zone": zone}
+        if control_type in ["play", "select"]:
+            params["index"] = index
+            
+        await self._make_request("netusb/setListControl", params)
+        return True
+
+    async def manage_play(self, action_type: str, timeout: int = 60000) -> bool:
+        """Manage playback actions like thumbs up/down."""
+        valid_types = ["thumbs_up", "thumbs_down"]
+        if action_type not in valid_types:
+            raise InvalidParameterError(f"Invalid action type: {action_type}. Must be one of {valid_types}")
+        
+        await self._make_request("netusb/managePlay", {"type": action_type, "timeout": timeout})
+        return True
+
+    async def toggle_shuffle(self) -> bool:
+        """Toggle shuffle mode."""
+        await self._make_request("netusb/toggleShuffle")
+        return True
+
+    async def toggle_repeat(self) -> bool:
+        """Toggle repeat mode."""
+        await self._make_request("netusb/toggleRepeat")
+        return True
+
     async def get_available_inputs(self, zone: str = "main") -> List[Dict[str, str]]:
         """Get available inputs for a zone from device capabilities."""
         try:
@@ -340,7 +396,10 @@ class YamahaMusicCastClient:
                 "usb": "USB", "tuner": "Tuner", "net_radio": "Net Radio", "phono": "Phono",
                 "napster": "Napster", "qobuz": "Qobuz", "tidal": "Tidal", "deezer": "Deezer",
                 "amazon_music": "Amazon Music", "alexa": "Alexa", "server": "Server",
-                "mc_link": "MusicCast Link", "main_sync": "Main Sync", "tv": "TV"
+                "mc_link": "MusicCast Link", "main_sync": "Main Sync", "tv": "TV",
+                "optical1": "Optical 1", "optical2": "Optical 2", "coaxial1": "Coaxial 1", 
+                "coaxial2": "Coaxial 2", "line1": "Line 1", "line2": "Line 2", "line3": "Line 3",
+                "line_cd": "Line CD", "juke": "Juke"
             }
             
             for input_id in zone_inputs:
@@ -383,12 +442,7 @@ class YamahaMusicCastClient:
 
     @classmethod
     async def discover_devices(cls, timeout: int = 10) -> List[Tuple[str, DeviceInfo]]:
-        """
-        Discover MusicCast devices on network.
-        
-        Note: This is a placeholder implementation. For full discovery,
-        you would implement mDNS/Bonjour discovery or network scanning.
-        """
+
         _LOG.info("Device discovery not implemented, returning empty list")
         return []
 
