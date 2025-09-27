@@ -148,6 +148,10 @@ class MusicCastRemote(Remote):
         for program in self._available_sound_programs:
             commands.append(f"sound_{program}")
 
+        # Add preset/favorites commands (1-40)
+        for preset_num in range(1, 41):
+            commands.append(f"preset_{preset_num}")
+
         # Build enhanced UI pages
         pages = []
 
@@ -167,6 +171,8 @@ class MusicCastRemote(Remote):
                 {'type': 'text', 'location': {'x': 3, 'y': 1}, 'text': 'STOP', 'command': {'cmd_id': 'send_cmd', 'params': {'command': 'stop'}}},
                 {'type': 'text', 'location': {'x': 0, 'y': 2}, 'text': 'REPEAT', 'command': {'cmd_id': 'send_cmd', 'params': {'command': 'repeat_toggle'}}},
                 {'type': 'text', 'location': {'x': 1, 'y': 2}, 'text': 'SHUFFLE', 'command': {'cmd_id': 'send_cmd', 'params': {'command': 'shuffle_toggle'}}},
+                {'type': 'text', 'location': {'x': 2, 'y': 2}, 'text': 'THUMBS+', 'command': {'cmd_id': 'send_cmd', 'params': {'command': 'thumbs_up'}}},
+                {'type': 'text', 'location': {'x': 3, 'y': 2}, 'text': 'THUMBS-', 'command': {'cmd_id': 'send_cmd', 'params': {'command': 'thumbs_down'}}},
             ]
         })
 
@@ -252,6 +258,84 @@ class MusicCastRemote(Remote):
                 'items': sound_items
             })
 
+        # Favorites/Presets page (first 16 presets)
+        preset_items = []
+        x, y = 0, 0
+        
+        for preset_num in range(1, 17):  # First 16 presets on 4x4 grid
+            if x >= 4:
+                x = 0
+                y += 1
+                if y >= 4:
+                    break
+            
+            preset_items.append({
+                'type': 'text',
+                'location': {'x': x, 'y': y},
+                'text': f"FAV{preset_num}",
+                'command': {'cmd_id': 'send_cmd', 'params': {'command': f"preset_{preset_num}"}}
+            })
+            x += 1
+
+        pages.append({
+            'page_id': 'favorites',
+            'name': 'Favorites 1-16',
+            'grid': {'width': 4, 'height': 6},
+            'items': preset_items
+        })
+
+        # Additional favorites page (17-32)
+        preset_items_2 = []
+        x, y = 0, 0
+        
+        for preset_num in range(17, 33):  # Next 16 presets
+            if x >= 4:
+                x = 0
+                y += 1
+                if y >= 4:
+                    break
+            
+            preset_items_2.append({
+                'type': 'text',
+                'location': {'x': x, 'y': y},
+                'text': f"FAV{preset_num}",
+                'command': {'cmd_id': 'send_cmd', 'params': {'command': f"preset_{preset_num}"}}
+            })
+            x += 1
+
+        pages.append({
+            'page_id': 'favorites2',
+            'name': 'Favorites 17-32',
+            'grid': {'width': 4, 'height': 6},
+            'items': preset_items_2
+        })
+
+        # Final favorites page (33-40, plus some empty slots)
+        preset_items_3 = []
+        x, y = 0, 0
+        
+        for preset_num in range(33, 41):  # Final 8 presets
+            if x >= 4:
+                x = 0
+                y += 1
+                if y >= 4:
+                    break
+            
+            preset_items_3.append({
+                'type': 'text',
+                'location': {'x': x, 'y': y},
+                'text': f"FAV{preset_num}",
+                'command': {'cmd_id': 'send_cmd', 'params': {'command': f"preset_{preset_num}"}}
+            })
+            x += 1
+
+        pages.append({
+            'page_id': 'favorites3',
+            'name': 'Favorites 33-40',
+            'grid': {'width': 4, 'height': 6},
+            'items': preset_items_3
+        })
+
         return commands, pages
 
     async def _handle_command(self, entity, cmd_id: str, params: dict = None) -> ucapi.StatusCodes:
@@ -284,19 +368,11 @@ class MusicCastRemote(Remote):
                     await self._client.set_power(self._zone, 'standby')
                 elif command == 'power_toggle':
                     await self._client.set_power(self._zone, 'toggle')
-                # Volume commands with standby check
+                # Volume commands with R-N803D specific format
                 elif command == 'volume_up':
-                    status = await self._client.get_status(self._zone)
-                    if status.power == "standby":
-                        await self._client.set_power(self._zone, 'on')
-                        await asyncio.sleep(1)
-                    await self._client.set_volume(self._zone, step=1)
+                    await self._client.set_volume(self._zone, direction="up", step=4)
                 elif command == 'volume_down':
-                    status = await self._client.get_status(self._zone)
-                    if status.power == "standby":
-                        await self._client.set_power(self._zone, 'on')
-                        await asyncio.sleep(1)
-                    await self._client.set_volume(self._zone, step=-1)
+                    await self._client.set_volume(self._zone, direction="down", step=4)
                 elif command == 'mute_toggle':
                     status = await self._client.get_status(self._zone)
                     if status.power == "standby":
@@ -346,6 +422,27 @@ class MusicCastRemote(Remote):
                     else:
                         _LOG.warning(f"Sound program not available: {program_id}")
                         return ucapi.StatusCodes.BAD_REQUEST
+                # Preset/Favorites commands (1-40)
+                elif command.startswith('preset_'):
+                    preset_num_str = command[7:]  # Remove 'preset_' prefix
+                    try:
+                        preset_num = int(preset_num_str)
+                        if 1 <= preset_num <= 40:
+                            await self._client.recall_preset(self._zone, preset_num)
+                        else:
+                            _LOG.warning(f"Invalid preset number: {preset_num}")
+                            return ucapi.StatusCodes.BAD_REQUEST
+                    except ValueError:
+                        _LOG.warning(f"Invalid preset command format: {command}")
+                        return ucapi.StatusCodes.BAD_REQUEST
+                # Thumbs up/down commands
+                elif command == 'thumbs_up':
+                    await self._client.manage_play('thumbs_up')
+                elif command == 'thumbs_down':
+                    await self._client.manage_play('thumbs_down')
+                # List navigation commands
+                elif command == 'list_return':
+                    await self._client.set_list_control('main', 'return', zone=self._zone)
                 else:
                     _LOG.warning(f"Unhandled remote command: {command}")
                     return ucapi.StatusCodes.NOT_IMPLEMENTED
