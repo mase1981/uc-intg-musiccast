@@ -403,9 +403,9 @@ class MusicCastRemote(Remote):
                     await self._client.set_power(self._zone, 'toggle')
                 # Volume commands with R-N803D specific format
                 elif command == 'volume_up':
-                    await self._client.set_volume(self._zone, direction="up", step=4)
+                    await self._client.set_volume(self._zone, direction="up", step=1)
                 elif command == 'volume_down':
-                    await self._client.set_volume(self._zone, direction="down", step=4)
+                    await self._client.set_volume(self._zone, direction="down", step=1)
                 elif command == 'mute_toggle':
                     status = await self._client.get_status(self._zone)
                     if status.power == "standby":

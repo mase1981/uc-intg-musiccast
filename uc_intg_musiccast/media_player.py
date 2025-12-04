@@ -260,9 +260,9 @@ class YamahaMusicCastMediaPlayer(MediaPlayer):
                 device_volume = self._convert_percentage_to_volume(percentage, status.max_volume)
                 await self._client.set_volume(self._zone, volume=device_volume)
             elif cmd_id == Commands.VOLUME_UP:
-                await self._client.set_volume(self._zone, direction="up", step=4)
+                await self._client.set_volume(self._zone, direction="up", step=1)
             elif cmd_id == Commands.VOLUME_DOWN:
-                await self._client.set_volume(self._zone, direction="down", step=4)
+                await self._client.set_volume(self._zone, direction="down", step=1)
             elif cmd_id == Commands.MUTE_TOGGLE:
                 current_mute = self.attributes.get(Attributes.MUTED, False)
                 await self._client.set_mute(self._zone, enable=not current_mute)
