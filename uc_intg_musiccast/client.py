@@ -56,12 +56,6 @@ class DeviceStatus:
     dialogue_level: int = 0
     subwoofer_volume: int = 0
     actual_volume: Dict[str, Any] = None
-    enhancer: bool = False
-    pure_direct: bool = False
-    surround_ai: bool = False
-    extra_bass: bool = False
-    adaptive_drc: bool = False
-    balance: int = 0
     
     def __post_init__(self):
         if self.tone_control is None:
@@ -84,13 +78,7 @@ class DeviceStatus:
             tone_control=data.get("tone_control", {"mode": "manual", "bass": 0, "treble": 0}),
             dialogue_level=int(data.get("dialogue_level", 0)),
             subwoofer_volume=int(data.get("subwoofer_volume", 0)),
-            actual_volume=data.get("actual_volume", {"mode": "db", "value": -80.0, "unit": "dB"}),
-            enhancer=bool(data.get("enhancer", False)),
-            pure_direct=bool(data.get("pure_direct", False)),
-            surround_ai=bool(data.get("surround_ai", False)),
-            extra_bass=bool(data.get("extra_bass", False)),
-            adaptive_drc=bool(data.get("adaptive_drc", False)),
-            balance=int(data.get("balance", 0))
+            actual_volume=data.get("actual_volume", {"mode": "db", "value": -80.0, "unit": "dB"})
         )
 
 
@@ -123,38 +111,6 @@ class PlayInfo:
             total_time=int(data.get("total_time", 0)),
             albumart_url=data.get("albumart_url", ""),
             input=data.get("input", "")
-        )
-
-
-@dataclass
-class TunerPlayInfo:
-    """Tuner playback information."""
-    
-    band: str = "fm"
-    freq: int = 87500
-    tuned: bool = False
-    preset: int = 0
-    station: str = ""
-    rds: Dict[str, Any] = None
-    dab: Dict[str, Any] = None
-    
-    def __post_init__(self):
-        if self.rds is None:
-            self.rds = {}
-        if self.dab is None:
-            self.dab = {}
-    
-    @classmethod
-    def from_api_response(cls, data: Dict[str, Any]) -> "TunerPlayInfo":
-        """Create TunerPlayInfo from API response."""
-        return cls(
-            band=data.get("band", "fm"),
-            freq=int(data.get("freq", 87500)),
-            tuned=bool(data.get("tuned", False)),
-            preset=int(data.get("preset", 0)),
-            station=data.get("station", ""),
-            rds=data.get("rds", {}),
-            dab=data.get("dab", {})
         )
 
 
@@ -322,8 +278,6 @@ class YamahaMusicCastClient:
         await self._make_request(f"{zone}/setToneControl", params)
         return True
 
-    # ==================== NETUSB MEDIA CONTROL ====================
-    
     async def get_play_info(self) -> PlayInfo:
         """Get current playback information."""
         data = await self._make_request("netusb/getPlayInfo")
@@ -365,14 +319,21 @@ class YamahaMusicCastClient:
         return True
 
     async def recall_preset(self, zone: str = "main", num: int = 1) -> bool:
-        """Recall a NetUSB preset (favorites 1-40)."""
+        """Recall a preset (favorites 1-40)."""
         if not (1 <= num <= 40):
             raise InvalidParameterError(f"Preset number must be between 1 and 40, got {num}")
         await self._make_request("netusb/recallPreset", {"zone": zone, "num": num})
         return True
 
+    async def recall_scene(self, zone: str = "main", num: int = 1) -> bool:
+        """Recall a scene (1-8)."""
+        if not (1 <= num <= 8):
+            raise InvalidParameterError(f"Scene number must be between 1 and 8, got {num}")
+        await self._make_request(f"{zone}/recallScene", {"num": num})
+        return True
+
     async def get_preset_info(self) -> Dict[str, Any]:
-        """Get NetUSB preset information."""
+        """Get preset information."""
         return await self._make_request("netusb/getPresetInfo")
 
     async def get_list_info(self, list_id: str = "main", input_source: Optional[str] = None, 
@@ -415,182 +376,6 @@ class YamahaMusicCastClient:
         """Toggle repeat mode."""
         await self._make_request("netusb/toggleRepeat")
         return True
-
-    # ==================== TUNER CONTROL ====================
-    
-    async def get_tuner_play_info(self) -> TunerPlayInfo:
-        """Get current tuner playback information."""
-        data = await self._make_request("tuner/getPlayInfo")
-        return TunerPlayInfo.from_api_response(data)
-    
-    async def recall_tuner_preset(self, zone: str = "main", band: str = "fm", num: int = 1) -> bool:
-        """Recall a tuner preset (1-40 per band)."""
-        if not (1 <= num <= 40):
-            raise InvalidParameterError(f"Tuner preset number must be between 1 and 40, got {num}")
-        if band not in ["fm", "dab"]:
-            raise InvalidParameterError(f"Invalid band: {band}. Must be 'fm' or 'dab'")
-        await self._make_request("tuner/recallPreset", {"zone": zone, "band": band, "num": num})
-        return True
-    
-    async def get_tuner_preset_info(self, band: str = "fm") -> Dict[str, Any]:
-        """Get tuner preset information for specified band."""
-        if band not in ["fm", "dab"]:
-            raise InvalidParameterError(f"Invalid band: {band}. Must be 'fm' or 'dab'")
-        return await self._make_request("tuner/getPresetInfo", {"band": band})
-    
-    async def set_tuner_freq(self, band: str = "fm", freq: int = 87500) -> bool:
-        """Set tuner frequency (FM: 87500-108000, DAB: varies)."""
-        if band not in ["fm", "dab"]:
-            raise InvalidParameterError(f"Invalid band: {band}. Must be 'fm' or 'dab'")
-        await self._make_request("tuner/setFreq", {"band": band, "freq": freq})
-        return True
-    
-    async def switch_tuner_preset(self, direction: str = "up") -> bool:
-        """Switch tuner preset up or down."""
-        if direction not in ["up", "down"]:
-            raise InvalidParameterError(f"Invalid direction: {direction}. Must be 'up' or 'down'")
-        await self._make_request("tuner/switchPreset", {"dir": direction})
-        return True
-
-    # ==================== SCENE CONTROL ====================
-    
-    async def set_scene(self, zone: str = "main", num: int = 1) -> bool:
-        """Recall a scene (1-8)."""
-        if not (1 <= num <= 8):
-            raise InvalidParameterError(f"Scene number must be between 1 and 8, got {num}")
-        await self._make_request(f"{zone}/setScene", {"num": num})
-        return True
-
-    # ==================== AUDIO ENHANCEMENT ====================
-    
-    async def set_sleep(self, zone: str = "main", sleep: int = 0) -> bool:
-        """Set sleep timer (0=off, 30/60/90/120 minutes)."""
-        valid_values = [0, 30, 60, 90, 120]
-        if sleep not in valid_values:
-            raise InvalidParameterError(f"Invalid sleep value: {sleep}. Must be one of {valid_values}")
-        await self._make_request(f"{zone}/setSleep", {"sleep": sleep})
-        return True
-    
-    async def set_enhancer(self, zone: str = "main", enable: bool = False) -> bool:
-        """Set enhancer on/off."""
-        await self._make_request(f"{zone}/setEnhancer", {"enable": "true" if enable else "false"})
-        return True
-    
-    async def set_pure_direct(self, zone: str = "main", enable: bool = False) -> bool:
-        """Set pure direct mode on/off."""
-        await self._make_request(f"{zone}/setPureDirect", {"enable": "true" if enable else "false"})
-        return True
-    
-    async def set_surround_ai(self, zone: str = "main", enable: bool = False) -> bool:
-        """Set surround AI on/off."""
-        await self._make_request(f"{zone}/setSurroundAi", {"enable": "true" if enable else "false"})
-        return True
-    
-    async def set_extra_bass(self, zone: str = "main", enable: bool = False) -> bool:
-        """Set extra bass on/off."""
-        await self._make_request(f"{zone}/setExtraBass", {"enable": "true" if enable else "false"})
-        return True
-    
-    async def set_adaptive_drc(self, zone: str = "main", enable: bool = False) -> bool:
-        """Set adaptive DRC on/off."""
-        await self._make_request(f"{zone}/setAdaptiveDrc", {"enable": "true" if enable else "false"})
-        return True
-    
-    async def set_balance(self, zone: str = "main", value: int = 0) -> bool:
-        """Set balance (-20 to +20)."""
-        value = max(-20, min(20, value))
-        await self._make_request(f"{zone}/setBalance", {"value": value})
-        return True
-    
-    async def set_subwoofer_volume(self, zone: str = "main", volume: int = 0) -> bool:
-        """Set subwoofer volume (device-specific range, typically 0-12)."""
-        await self._make_request(f"{zone}/setSubwooferVolume", {"volume": volume})
-        return True
-    
-    async def set_dialogue_level(self, zone: str = "main", level: int = 0) -> bool:
-        """Set dialogue level (0-3 typically)."""
-        await self._make_request(f"{zone}/setDialogueLevel", {"level": level})
-        return True
-    
-    async def set_dialogue_lift(self, zone: str = "main", level: int = 0) -> bool:
-        """Set dialogue lift (0-5 typically)."""
-        await self._make_request(f"{zone}/setDialogueLift", {"level": level})
-        return True
-    
-    async def set_dts_dialogue_control(self, zone: str = "main", value: int = 0) -> bool:
-        """Set DTS dialogue control (0-6)."""
-        value = max(0, min(6, value))
-        await self._make_request(f"{zone}/setDtsDialogueControl", {"value": value})
-        return True
-    
-    async def set_adaptive_dsp_level(self, zone: str = "main", enable: bool = False) -> bool:
-        """Set adaptive DSP level on/off."""
-        await self._make_request(f"{zone}/setAdaptiveDspLevel", {"enable": "true" if enable else "false"})
-        return True
-    
-    async def set_auro_3d_listening_mode(self, zone: str = "main", mode: str = "auto") -> bool:
-        """Set Auro-3D listening mode."""
-        await self._make_request(f"{zone}/setAuro3dListeningMode", {"mode": mode})
-        return True
-    
-    async def set_auro_matic_preset(self, zone: str = "main", preset: str = "auto") -> bool:
-        """Set Auro-Matic preset."""
-        await self._make_request(f"{zone}/setAuroMaticPreset", {"preset": preset})
-        return True
-    
-    async def set_auro_matic_strength(self, zone: str = "main", value: int = 0) -> bool:
-        """Set Auro-Matic strength (0-15)."""
-        value = max(0, min(15, value))
-        await self._make_request(f"{zone}/setAuroMaticStrength", {"value": value})
-        return True
-
-    # ==================== CURSOR/MENU NAVIGATION ====================
-    
-    async def set_cursor(self, zone: str = "main", cursor: str = "select") -> bool:
-        """Set cursor control (up/down/left/right/select/return)."""
-        valid_cursors = ["up", "down", "left", "right", "select", "return"]
-        if cursor not in valid_cursors:
-            raise InvalidParameterError(f"Invalid cursor: {cursor}. Must be one of {valid_cursors}")
-        await self._make_request(f"{zone}/setCursor", {"cursor": cursor})
-        return True
-    
-    async def set_menu(self, zone: str = "main", menu: str = "on_screen") -> bool:
-        """Set menu control."""
-        valid_menus = ["on_screen", "top_menu", "menu", "option", "display", "help", "home", "mode", "red", "green", "yellow", "blue"]
-        if menu not in valid_menus:
-            raise InvalidParameterError(f"Invalid menu: {menu}. Must be one of {valid_menus}")
-        await self._make_request(f"{zone}/setMenu", {"menu": menu})
-        return True
-
-    # ==================== LINK CONTROL ====================
-    
-    async def set_link_control(self, zone: str = "main", control: str = "standard") -> bool:
-        """Set link control mode (standard/speed/stability)."""
-        valid_modes = ["standard", "speed", "stability"]
-        if control not in valid_modes:
-            raise InvalidParameterError(f"Invalid control: {control}. Must be one of {valid_modes}")
-        await self._make_request(f"{zone}/setLinkControl", {"control": control})
-        return True
-    
-    async def set_link_audio_delay(self, zone: str = "main", delay: int = 0) -> bool:
-        """Set link audio delay (0-500 milliseconds)."""
-        delay = max(0, min(500, delay))
-        await self._make_request(f"{zone}/setLinkAudioDelay", {"delay": delay})
-        return True
-
-    # ==================== OTHER ZONE FEATURES ====================
-    
-    async def set_contents_display(self, zone: str = "main", enable: bool = True) -> bool:
-        """Set contents display on/off."""
-        await self._make_request(f"{zone}/setContentsDisplay", {"enable": "true" if enable else "false"})
-        return True
-    
-    async def prepare_input_change(self, zone: str = "main", input_source: str = "") -> bool:
-        """Prepare for input change (some devices need this before setInput)."""
-        await self._make_request(f"{zone}/prepareInputChange", {"input": input_source})
-        return True
-
-    # ==================== CAPABILITY DETECTION ====================
 
     async def get_available_inputs(self, zone: str = "main") -> List[Dict[str, str]]:
         """Get available inputs for a zone from device capabilities."""
@@ -661,42 +446,10 @@ class YamahaMusicCastClient:
         except Exception as e:
             _LOG.error(f"Failed to get sound programs: {e}")
             return []
-    
-    async def has_tuner(self) -> bool:
-        """Check if device has tuner capability."""
-        try:
-            features = await self.get_features()
-            tuner_info = features.get("tuner", {})
-            func_list = tuner_info.get("func_list", [])
-            return len(func_list) > 0
-        except Exception:
-            return False
-    
-    async def get_tuner_bands(self) -> List[str]:
-        """Get available tuner bands (fm, dab, am)."""
-        try:
-            features = await self.get_features()
-            tuner_info = features.get("tuner", {})
-            bands = tuner_info.get("func_list", [])
-            _LOG.info(f"Found tuner bands: {bands}")
-            return bands
-        except Exception as e:
-            _LOG.error(f"Failed to get tuner bands: {e}")
-            return []
-    
-    async def get_zone_capabilities(self, zone: str = "main") -> Dict[str, Any]:
-        """Get zone-specific capabilities."""
-        try:
-            features = await self.get_features()
-            for zone_info in features.get("zone", []):
-                if zone_info.get("id") == zone:
-                    return zone_info
-            return {}
-        except Exception:
-            return {}
 
     @classmethod
     async def discover_devices(cls, timeout: int = 10) -> List[Tuple[str, DeviceInfo]]:
+
         _LOG.info("Device discovery not implemented, returning empty list")
         return []
 
@@ -709,3 +462,15 @@ class YamahaMusicCastClient:
         except Exception as e:
             _LOG.debug(f"Device verification failed for {ip_address}: {e}")
             return None
+    async def get_scene_support(self, zone: str = "main") -> bool:
+        """Check if zone supports scene recall."""
+        try:
+            features = await self.get_features()
+            for zone_info in features.get("zone", []):
+                if zone_info.get("id") == zone:
+                    func_list = zone_info.get("func_list", [])
+                    return "scene" in func_list
+            return False
+        except Exception as e:
+            _LOG.error(f"Failed to check scene support: {e}")
+            return False
