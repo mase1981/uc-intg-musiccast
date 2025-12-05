@@ -41,6 +41,7 @@ class MusicCastRemote(Remote):
         self._integration_api = None
         self._available_sources = []
         self._available_sound_programs = []
+        self._scene_support = False
 
     def set_client(self, client):
         """Set the MusicCast API client."""
@@ -62,6 +63,8 @@ class MusicCastRemote(Remote):
                 sound_programs = await self._client.get_available_sound_programs(self._zone)
                 self._available_sound_programs = sound_programs
                 
+                self._scene_support = await self._client.get_scene_support(self._zone)
+                
                 # Rebuild UI with actual device capabilities
                 simple_commands, ui_pages = self._build_enhanced_ui()
                 
@@ -70,7 +73,7 @@ class MusicCastRemote(Remote):
                     self.options["simple_commands"] = simple_commands
                     self.options["user_interface"] = {"pages": ui_pages}
                 
-                _LOG.info(f"Remote initialized with {len(self._available_sources)} sources and {len(sound_programs)} sound programs")
+                _LOG.info(f"Remote initialized with {len(self._available_sources)} sources, {len(sound_programs)} sound programs, scene support: {self._scene_support}")
                 
             except Exception as e:
                 _LOG.error(f"Failed to initialize remote capabilities: {e}")
@@ -151,6 +154,9 @@ class MusicCastRemote(Remote):
         # Add preset/favorites commands (1-40)
         for preset_num in range(1, 41):
             commands.append(f"preset_{preset_num}")
+        if self._scene_support:
+            for scene_num in range(1, 9):
+                commands.append(f"scene_{scene_num}")
 
         # Build enhanced UI pages
         pages = []
@@ -336,6 +342,33 @@ class MusicCastRemote(Remote):
             'items': preset_items_3
         })
 
+
+        if self._scene_support:
+            scene_items = []
+            x, y = 0, 0
+            
+            for scene_num in range(1, 9):
+                if x >= 4:
+                    x = 0
+                    y += 1
+                    if y >= 4:
+                        break
+                
+                scene_items.append({
+                    'type': 'text',
+                    'location': {'x': x, 'y': y},
+                    'text': f"SCENE{scene_num}",
+                    'command': {'cmd_id': 'send_cmd', 'params': {'command': f"scene_{scene_num}"}}
+                })
+                x += 1
+    
+            pages.append({
+                'page_id': 'scenes',
+                'name': 'Scenes',
+                'grid': {'width': 4, 'height': 6},
+                'items': scene_items
+            })
+
         return commands, pages
 
     async def _handle_command(self, entity, cmd_id: str, params: dict = None) -> ucapi.StatusCodes:
@@ -370,9 +403,9 @@ class MusicCastRemote(Remote):
                     await self._client.set_power(self._zone, 'toggle')
                 # Volume commands with R-N803D specific format
                 elif command == 'volume_up':
-                    await self._client.set_volume(self._zone, direction="up", step=4)
+                    await self._client.set_volume(self._zone, direction="up", step=1)
                 elif command == 'volume_down':
-                    await self._client.set_volume(self._zone, direction="down", step=4)
+                    await self._client.set_volume(self._zone, direction="down", step=1)
                 elif command == 'mute_toggle':
                     status = await self._client.get_status(self._zone)
                     if status.power == "standby":
@@ -434,6 +467,18 @@ class MusicCastRemote(Remote):
                             return ucapi.StatusCodes.BAD_REQUEST
                     except ValueError:
                         _LOG.warning(f"Invalid preset command format: {command}")
+                        return ucapi.StatusCodes.BAD_REQUEST
+                elif command.startswith("scene_"):
+                    scene_num_str = command[6:]
+                    try:
+                        scene_num = int(scene_num_str)
+                        if 1 <= scene_num <= 8:
+                            await self._client.recall_scene(self._zone, scene_num)
+                        else:
+                            _LOG.warning(f"Invalid scene number: {scene_num}")
+                            return ucapi.StatusCodes.BAD_REQUEST
+                    except ValueError:
+                        _LOG.warning(f"Invalid scene command format: {command}")
                         return ucapi.StatusCodes.BAD_REQUEST
                 # Thumbs up/down commands
                 elif command == 'thumbs_up':

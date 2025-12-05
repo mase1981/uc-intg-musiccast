@@ -325,6 +325,13 @@ class YamahaMusicCastClient:
         await self._make_request("netusb/recallPreset", {"zone": zone, "num": num})
         return True
 
+    async def recall_scene(self, zone: str = "main", num: int = 1) -> bool:
+        """Recall a scene (1-8)."""
+        if not (1 <= num <= 8):
+            raise InvalidParameterError(f"Scene number must be between 1 and 8, got {num}")
+        await self._make_request(f"{zone}/recallScene", {"num": num})
+        return True
+
     async def get_preset_info(self) -> Dict[str, Any]:
         """Get preset information."""
         return await self._make_request("netusb/getPresetInfo")
@@ -455,3 +462,15 @@ class YamahaMusicCastClient:
         except Exception as e:
             _LOG.debug(f"Device verification failed for {ip_address}: {e}")
             return None
+    async def get_scene_support(self, zone: str = "main") -> bool:
+        """Check if zone supports scene recall."""
+        try:
+            features = await self.get_features()
+            for zone_info in features.get("zone", []):
+                if zone_info.get("id") == zone:
+                    func_list = zone_info.get("func_list", [])
+                    return "scene" in func_list
+            return False
+        except Exception as e:
+            _LOG.error(f"Failed to check scene support: {e}")
+            return False

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "uc-intg-yamaha-musiccast"
-version = "1.0.3"
+dynamic = ["version"]
 description = "Unfolded Circle Remote Two integration for Yamaha MusicCast devices"
 readme = "README.md"
 license = {file = "LICENSE"}
@@ -55,6 +55,9 @@ Issues = "https://github.com/mase1981/uc-intg-musiccast/issues"
 
 [tool.setuptools]
 packages = ["uc_intg_musiccast"]
+
+[tool.setuptools.dynamic]
+version = {attr = "uc_intg_musiccast.__version__"}
 
 [tool.setuptools.package-data]
 uc_intg_musiccast = ["*.json"]
