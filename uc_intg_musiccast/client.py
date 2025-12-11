@@ -157,7 +157,10 @@ class YamahaMusicCastClient:
         """Ensure HTTP session is available."""
         if self._session is None or self._session.closed:
             timeout = aiohttp.ClientTimeout(total=self.timeout)
-            self._session = aiohttp.ClientSession(timeout=timeout)
+            # Explicitly disable SSL verification for local device HTTP communication
+            # This prevents SSL context errors in some environments
+            connector = aiohttp.TCPConnector(ssl=False)
+            self._session = aiohttp.ClientSession(timeout=timeout, connector=connector)
     
     async def close(self):
         """Close HTTP session."""
