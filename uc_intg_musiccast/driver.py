@@ -41,7 +41,7 @@ setup_state = {"step": "initial", "device_count": 1, "devices_data": []}
 async def _initialize_integration():
     """
     CRITICAL: Initialize integration and create entities atomically.
-    Enhanced for multi-device support.
+    Enhanced for multi-device support with port and SSL configuration.
     """
     global clients, api, config, media_players, remotes, entities_ready
     
@@ -68,9 +68,16 @@ async def _initialize_integration():
                 continue
 
             try:
-                _LOG.info("Connecting to MusicCast device: %s at %s", device_config.name, device_config.address)
+                _LOG.info("Connecting to MusicCast device: %s at %s:%d (SSL: %s)", 
+                         device_config.name, device_config.address, 
+                         device_config.port, device_config.use_ssl)
                 
-                client = YamahaMusicCastClient(device_config.address)
+                # Create client with port and SSL settings
+                client = YamahaMusicCastClient(
+                    device_config.address,
+                    port=device_config.port,
+                    use_ssl=device_config.use_ssl
+                )
                 device_info = await client.get_device_info()
 
                 device_name = device_config.name or device_info.friendly_name or 'MusicCast Device'
@@ -130,7 +137,7 @@ async def _initialize_integration():
             return False
 
 async def setup_handler(msg: ucapi.SetupDriver) -> ucapi.SetupAction:
-    """Enhanced setup handler for multi-device support following Naim pattern."""
+    """Enhanced setup handler for multi-device support with port and SSL configuration."""
     global config, entities_ready, setup_state
 
     if isinstance(msg, ucapi.DriverSetupRequest):
@@ -138,7 +145,7 @@ async def setup_handler(msg: ucapi.SetupDriver) -> ucapi.SetupAction:
         device_count = int(msg.setup_data.get("device_count", 1))
         
         if device_count == 1:
-            # Single device - use existing simple flow
+            # Single device - use enhanced flow with port and SSL
             return await _handle_single_device_setup(msg.setup_data)
         else:
             # Multi-device setup
@@ -148,22 +155,59 @@ async def setup_handler(msg: ucapi.SetupDriver) -> ucapi.SetupAction:
     elif isinstance(msg, UserDataResponse):
         if setup_state["step"] == "collect_ips":
             return await _handle_device_ips_collection(msg.input_values)
+        else:
+            # Handle single device detailed config
+            return await _handle_single_device_setup(msg.input_values)
 
     return SetupError(IntegrationSetupError.OTHER)
 
 async def _handle_single_device_setup(setup_data: Dict[str, Any]) -> ucapi.SetupAction:
-    """Handle single device setup (existing flow)."""
+    """Handle single device setup with port and SSL support."""
+    
+    # Check if we need to request detailed config
+    if "port" not in setup_data or "use_ssl" not in setup_data:
+        host = setup_data.get("host", "")
+        return ucapi.RequestUserInput(
+            title={"en": "Device Configuration"},
+            settings=[
+                {
+                    "id": "host",
+                    "label": {"en": "IP Address"},
+                    "field": {"text": {"value": host}}
+                },
+                {
+                    "id": "port",
+                    "label": {"en": "Port"},
+                    "field": {"number": {"value": 80, "min": 1, "max": 65535}}
+                },
+                {
+                    "id": "use_ssl",
+                    "label": {"en": "Use HTTPS (ignore self-signed certificates)"},
+                    "field": {"checkbox": {"value": False}}
+                }
+            ]
+        )
+    
     host = setup_data.get("host")
+    port = int(setup_data.get("port", 80))
+    
+    # Properly convert string "true"/"false" to boolean
+    use_ssl_value = setup_data.get("use_ssl", False)
+    if isinstance(use_ssl_value, str):
+        use_ssl = use_ssl_value.lower() in ("true", "1", "yes")
+    else:
+        use_ssl = bool(use_ssl_value)
+    
     if not host:
         _LOG.error("No host provided in setup data")
         return SetupError(IntegrationSetupError.OTHER)
 
-    _LOG.info("Testing connection to MusicCast device at %s", host)
+    _LOG.info(f"Testing connection to MusicCast device at {host}:{port} (SSL: {use_ssl})")
     try:
-        async with YamahaMusicCastClient(host) as test_client:
+        async with YamahaMusicCastClient(host, port=port, use_ssl=use_ssl) as test_client:
             device_info = await test_client.get_device_info()
             if not device_info or not device_info.device_id:
-                 _LOG.error("Connection test failed for host: %s", host)
+                 _LOG.error(f"Connection test failed for host: {host}:{port}")
                  return SetupError(IntegrationSetupError.CONNECTION_REFUSED)
 
         # Create device configuration
@@ -172,7 +216,8 @@ async def _handle_single_device_setup(setup_data: Dict[str, Any]) -> ucapi.Setup
             id=device_id,
             name=device_info.friendly_name or f"MusicCast Device ({host})",
             address=host,
-            port=80,
+            port=port,
+            use_ssl=use_ssl,
             enabled=True,
             standby_monitoring=True
         )
@@ -188,7 +233,7 @@ async def _handle_single_device_setup(setup_data: Dict[str, Any]) -> ucapi.Setup
         return SetupError(IntegrationSetupError.OTHER)
 
 async def _request_device_ips(device_count: int) -> RequestUserInput:
-    """Request IP addresses for multiple devices."""
+    """Request IP addresses for multiple devices with port and SSL support."""
     settings = []
     
     for i in range(device_count):
@@ -198,6 +243,18 @@ async def _request_device_ips(device_count: int) -> RequestUserInput:
                 "label": {"en": f"Device {i+1} IP Address"},
                 "description": {"en": f"IP address for MusicCast device {i+1} (e.g., 192.168.1.{100+i})"},
                 "field": {"text": {"value": f"192.168.1.{100+i}"}}
+            },
+            {
+                "id": f"device_{i}_port",
+                "label": {"en": f"Device {i+1} Port"},
+                "description": {"en": "Default: 80 for HTTP, 443 for HTTPS"},
+                "field": {"number": {"value": 80, "min": 1, "max": 65535}}
+            },
+            {
+                "id": f"device_{i}_ssl",
+                "label": {"en": f"Device {i+1} Use HTTPS"},
+                "description": {"en": "Enable for HTTPS (ignores self-signed certificate warnings)"},
+                "field": {"checkbox": {"value": False}}
             },
             {
                 "id": f"device_{i}_name", 
@@ -213,17 +270,28 @@ async def _request_device_ips(device_count: int) -> RequestUserInput:
     )
 
 async def _handle_device_ips_collection(input_values: Dict[str, Any]) -> ucapi.SetupAction:
-    """Process multiple device IPs and test connections."""
+    """Process multiple device IPs with port and SSL configuration."""
     devices_to_test = []
     
     # Extract device data from input
     device_index = 0
     while f"device_{device_index}_ip" in input_values:
         ip_input = input_values[f"device_{device_index}_ip"]
+        port = int(input_values.get(f"device_{device_index}_port", 80))
+        
+        # Properly convert string "true"/"false" to boolean
+        use_ssl_value = input_values.get(f"device_{device_index}_ssl", False)
+        if isinstance(use_ssl_value, str):
+            use_ssl = use_ssl_value.lower() in ("true", "1", "yes")
+        else:
+            use_ssl = bool(use_ssl_value)
+        
         name = input_values[f"device_{device_index}_name"]
         
         devices_to_test.append({
             "host": ip_input.strip(),
+            "port": port,
+            "use_ssl": use_ssl,
             "name": name.strip(),
             "index": device_index
         })
@@ -242,7 +310,8 @@ async def _handle_device_ips_collection(input_values: Dict[str, Any]) -> ucapi.S
                 id=device_id,
                 name=device_data['name'],
                 address=device_data['host'],
-                port=80,
+                port=device_data['port'],
+                use_ssl=device_data['use_ssl'],
                 enabled=True,
                 standby_monitoring=True
             )
@@ -262,10 +331,14 @@ async def _handle_device_ips_collection(input_values: Dict[str, Any]) -> ucapi.S
     return SetupComplete()
 
 async def _test_multiple_devices(devices: List[Dict]) -> List[bool]:
-    """Test connections to multiple devices concurrently."""
+    """Test connections to multiple devices concurrently with port and SSL support."""
     async def test_device(device_data):
         try:
-            async with YamahaMusicCastClient(device_data['host']) as client:
+            async with YamahaMusicCastClient(
+                device_data['host'], 
+                port=device_data['port'],
+                use_ssl=device_data['use_ssl']
+            ) as client:
                 device_info = await client.get_device_info()
                 if device_info:
                     _LOG.info(f"Device {device_data['index'] + 1}: {device_info.model_name} ({device_info.device_id})")

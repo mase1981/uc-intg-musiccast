@@ -7,6 +7,7 @@ Yamaha MusicCast API client implementation.
 
 import asyncio
 import logging
+import ssl
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlencode
@@ -134,15 +135,21 @@ class YamahaMusicCastClient:
     Yamaha MusicCast API client.
     """
     
-    def __init__(self, ip_address: str, timeout: int = 10):
+    def __init__(self, ip_address: str, timeout: int = 10, port: int = 80, use_ssl: bool = False):
         """Initialize client."""
         self.ip_address = ip_address
+        self.port = port
+        self.use_ssl = use_ssl
         self.timeout = timeout
-        self.base_url = f"http://{ip_address}"
+        
+        # Build base URL with protocol and port
+        protocol = "https" if use_ssl else "http"
+        self.base_url = f"{protocol}://{ip_address}:{port}"
         self.api_base = f"{self.base_url}/YamahaExtendedControl/v1"
+        
         self._session: Optional[aiohttp.ClientSession] = None
         self._device_capabilities: Optional[Dict[str, Any]] = None
-        _LOG.debug(f"Initialized Yamaha client for {ip_address}")
+        _LOG.debug(f"Initialized Yamaha client for {ip_address}:{port} (SSL: {use_ssl})")
     
     async def __aenter__(self):
         """Async context manager entry."""
@@ -157,9 +164,19 @@ class YamahaMusicCastClient:
         """Ensure HTTP session is available."""
         if self._session is None or self._session.closed:
             timeout = aiohttp.ClientTimeout(total=self.timeout)
-            # Explicitly disable SSL verification for local device HTTP communication
-            # This prevents SSL context errors in some environments
-            connector = aiohttp.TCPConnector(ssl=False)
+            
+            if self.use_ssl:
+                # Create SSL context that ignores certificate verification for self-signed certs
+                ssl_context = ssl.create_default_context()
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = ssl.CERT_NONE
+                connector = aiohttp.TCPConnector(ssl=ssl_context)
+                _LOG.debug("Created SSL connector with certificate verification disabled")
+            else:
+                # Explicitly disable SSL for HTTP connections
+                connector = aiohttp.TCPConnector(ssl=False)
+                _LOG.debug("Created non-SSL connector")
+            
             self._session = aiohttp.ClientSession(timeout=timeout, connector=connector)
     
     async def close(self):
@@ -198,10 +215,10 @@ class YamahaMusicCastClient:
                 return data
                 
         except aiohttp.ClientError as e:
-            _LOG.error(f"Network error communicating with device {self.ip_address}: {e}")
+            _LOG.error(f"Network error communicating with device {self.ip_address}:{self.port}: {e}")
             raise DeviceNotReachableError(f"Network error: {e}")
         except asyncio.TimeoutError:
-            _LOG.error(f"Timeout communicating with device {self.ip_address}")
+            _LOG.error(f"Timeout communicating with device {self.ip_address}:{self.port}")
             raise DeviceNotReachableError("Request timeout")
 
     async def get_device_info(self) -> DeviceInfo:
@@ -457,14 +474,15 @@ class YamahaMusicCastClient:
         return []
 
     @classmethod  
-    async def verify_device(cls, ip_address: str, timeout: int = 5) -> Optional[DeviceInfo]:
+    async def verify_device(cls, ip_address: str, timeout: int = 5, port: int = 80, use_ssl: bool = False) -> Optional[DeviceInfo]:
         """Verify device at given IP address."""
         try:
-            async with cls(ip_address, timeout) as client:
+            async with cls(ip_address, timeout, port, use_ssl) as client:
                 return await client.get_device_info()
         except Exception as e:
-            _LOG.debug(f"Device verification failed for {ip_address}: {e}")
+            _LOG.debug(f"Device verification failed for {ip_address}:{port} (SSL: {use_ssl}): {e}")
             return None
+    
     async def get_scene_support(self, zone: str = "main") -> bool:
         """Check if zone supports scene recall."""
         try:

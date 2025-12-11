@@ -22,6 +22,7 @@ class MusicCastDeviceConfig:
     name: str
     address: str
     port: int = 80
+    use_ssl: bool = False
     enabled: bool = True
     standby_monitoring: bool = True
 
@@ -42,6 +43,7 @@ class MusicCastConfig:
                 name=device_data.get("name", ""),
                 address=device_data.get("address", ""),
                 port=device_data.get("port", 80),
+                use_ssl=device_data.get("use_ssl", False),
                 enabled=device_data.get("enabled", True),
                 standby_monitoring=device_data.get("standby_monitoring", True)
             )
@@ -56,6 +58,7 @@ class MusicCastConfig:
                     "name": device.name,
                     "address": device.address,
                     "port": device.port,
+                    "use_ssl": device.use_ssl,
                     "enabled": device.enabled,
                     "standby_monitoring": device.standby_monitoring
                 }
@@ -135,6 +138,7 @@ class Config:
                 name=f"MusicCast Device ({value})",
                 address=value,
                 port=80,
+                use_ssl=False,
                 enabled=True,
                 standby_monitoring=True
             )

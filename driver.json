@@ -1,6 +1,6 @@
 {
   "driver_id": "uc_intg_yamaha_musiccast",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "min_core_api": "0.21.0",
   "name": {
     "en": "Yamaha MusicCast"
@@ -51,6 +51,36 @@
           "text": {
             "value": "",
             "placeholder": "192.168.1.100"
+          }
+        }
+      },
+      {
+        "id": "port",
+        "label": {
+          "en": "Port (Single Device Only)"
+        },
+        "description": {
+          "en": "Port number for the device. Default: 80 for HTTP, 443 for HTTPS."
+        },
+        "field": {
+          "number": {
+            "value": 80,
+            "min": 1,
+            "max": 65535
+          }
+        }
+      },
+      {
+        "id": "use_ssl",
+        "label": {
+          "en": "Use HTTPS (Single Device Only)"
+        },
+        "description": {
+          "en": "Enable HTTPS connection. Self-signed certificates are accepted."
+        },
+        "field": {
+          "checkbox": {
+            "value": false
           }
         }
       }
