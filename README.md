@@ -15,6 +15,18 @@ Control your Yamaha MusicCast audio devices directly from your Unfolded Circle R
 
 This integration provides comprehensive control of your Yamaha MusicCast audio devices directly from your Unfolded Circle Remote, supporting a wide range of audio control and streaming functions. **Multi-device support** allows you to control up to 10 MusicCast devices from a single integration.
 
+---
+## ❤️ Support Development ❤️
+
+If you find this integration useful, consider supporting development:
+
+[![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub-pink?style=for-the-badge&logo=github)](https://github.com/sponsors/mase1981)
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/meirmiyara)
+[![PayPal](https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/mmiyara)
+
+Your support helps maintain this integration. Thank you! ❤️
+---
+
 ### 🎵 **Media Player Control**
 
 Transform your remote into a powerful MusicCast controller with full playback management:
