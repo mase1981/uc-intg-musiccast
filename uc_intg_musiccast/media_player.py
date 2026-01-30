@@ -24,6 +24,7 @@ class YamahaMusicCastMediaPlayer(MediaPlayer):
     def __init__(self, entity_id: str, device_name: str):
         features = self._build_features()
         attributes = self._build_initial_attributes()
+        options = self._build_options()
 
         super().__init__(
             identifier=entity_id,  # Use provided entity_id for multi-device support
@@ -31,6 +32,7 @@ class YamahaMusicCastMediaPlayer(MediaPlayer):
             features=features,
             attributes=attributes,
             device_class=DeviceClasses.RECEIVER,  # Changed to RECEIVER for AVR devices
+            options=options,
             cmd_handler=self._handle_command,
         )
 
@@ -67,6 +69,22 @@ class YamahaMusicCastMediaPlayer(MediaPlayer):
             Attributes.SOURCE: "",
             Attributes.SOUND_MODE_LIST: [],
             Attributes.SOUND_MODE: "",
+        }
+
+    def _build_options(self) -> dict:
+        """Build entity options including simple commands for activity support."""
+        return {
+            "simple_commands": [
+                "PLAY",
+                "PAUSE",
+                "PLAY_PAUSE",
+                "STOP",
+                "NEXT",
+                "PREVIOUS",
+                "VOLUME_UP",
+                "VOLUME_DOWN",
+                "MUTE_TOGGLE"
+            ]
         }
 
     async def initialize_sources(self):
@@ -241,8 +259,29 @@ class YamahaMusicCastMediaPlayer(MediaPlayer):
 
         try:
             _LOG.info(f"Handling media player command for {self.id}: {cmd_id} with params: {params}")
-            
-            if cmd_id == Commands.ON:
+
+            # Handle simple commands from activities
+            if cmd_id == "PLAY":
+                await self._client.set_playback("play")
+            elif cmd_id == "PAUSE":
+                await self._client.set_playback("pause")
+            elif cmd_id == "PLAY_PAUSE":
+                await self._client.set_playback("play_pause")
+            elif cmd_id == "STOP":
+                await self._client.set_playback("stop")
+            elif cmd_id == "NEXT":
+                await self._client.set_playback("next")
+            elif cmd_id == "PREVIOUS":
+                await self._client.set_playback("previous")
+            elif cmd_id == "VOLUME_UP":
+                await self._client.set_volume(self._zone, direction="up", step=1)
+            elif cmd_id == "VOLUME_DOWN":
+                await self._client.set_volume(self._zone, direction="down", step=1)
+            elif cmd_id == "MUTE_TOGGLE":
+                current_mute = self.attributes.get(Attributes.MUTED, False)
+                await self._client.set_mute(self._zone, enable=not current_mute)
+            # Handle standard entity commands
+            elif cmd_id == Commands.ON:
                 await self._client.set_power(self._zone, "on")
             elif cmd_id == Commands.OFF:
                 await self._client.set_power(self._zone, "standby")
