@@ -1,9 +1,9 @@
 {
   "driver_id": "uc-intg-musiccast",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "min_core_api": "0.22.0",
   "name": {"en": "Yamaha MusicCast"},
-  "icon": "uc:audio",
+  "icon": "custom:musiccast-logo.png",
   "description": {"en": "Control Yamaha MusicCast audio devices with playback, volume, input selection, and sound programs."},
   "developer": {"name": "Meir Miyara", "email": "meir.miyara@gmail.com", "url": "https://github.com/mase1981"},
   "home_page": "https://github.com/mase1981/uc-intg-musiccast",

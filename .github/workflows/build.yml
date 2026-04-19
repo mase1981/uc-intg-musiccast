@@ -65,6 +65,7 @@ jobs:
           mkdir -p artifacts/bin
           mv dist/driver/* artifacts/bin/
           cp driver.json artifacts/
+          [[ -f assets/musiccast-logo.png ]] && cp assets/musiccast-logo.png artifacts/
           echo "ARTIFACT_NAME=uc-intg-${{ env.DRIVER_ID }}-${{ env.VERSION }}-aarch64" >> $GITHUB_ENV
 
       - run: tar czvf ${{ env.ARTIFACT_NAME }}.tar.gz -C ${GITHUB_WORKSPACE}/artifacts .
