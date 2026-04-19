@@ -1,90 +1,27 @@
 {
-  "driver_id": "uc_intg_yamaha_musiccast",
-  "version": "1.1.2",
-  "min_core_api": "0.21.0",
-  "name": {
-    "en": "Yamaha MusicCast"
-  },
-  "icon": "uc:music",
-  "description": {
-    "en": "Integration for Yamaha MusicCast audio devices supporting playback control, volume management, and multi-zone audio streaming. Supports multiple devices."
-  },
-  "developer": {
-    "name": "Meir Miyara",
-    "email": "meir.miyara@gmail.com"
-  },
+  "driver_id": "uc-intg-musiccast",
+  "version": "2.0.0",
+  "min_core_api": "0.22.0",
+  "name": {"en": "Yamaha MusicCast"},
+  "icon": "uc:audio",
+  "description": {"en": "Control Yamaha MusicCast audio devices with playback, volume, input selection, and sound programs."},
+  "developer": {"name": "Meir Miyara", "email": "meir.miyara@gmail.com", "url": "https://github.com/mase1981"},
   "home_page": "https://github.com/mase1981/uc-intg-musiccast",
-  "documentation": "https://github.com/mase1981/uc-intg-musiccast/blob/main/README.md",
+  "release_date": "2026-04-19",
   "setup_data_schema": {
-    "title": {
-      "en": "Yamaha MusicCast Device Setup"
-    },
-    "description": {
-      "en": "Configure your Yamaha MusicCast devices. You can set up one or multiple devices."
-    },
+    "title": {"en": "Yamaha MusicCast Setup"},
     "settings": [
       {
-        "id": "device_count",
-        "label": {
-          "en": "Number of Devices"
-        },
-        "description": {
-          "en": "How many MusicCast devices do you want to configure?"
-        },
+        "id": "info",
+        "label": {"en": "Setup Information"},
         "field": {
-          "number": {
-            "value": 1,
-            "min": 1,
-            "max": 10
-          }
-        }
-      },
-      {
-        "id": "host",
-        "label": {
-          "en": "Device IP Address (Single Device Only)"
-        },
-        "description": {
-          "en": "For single device setup only. Enter your MusicCast device IP address (e.g., 192.168.1.100). Leave empty if configuring multiple devices."
-        },
-        "field": {
-          "text": {
-            "value": "",
-            "placeholder": "192.168.1.100"
-          }
-        }
-      },
-      {
-        "id": "port",
-        "label": {
-          "en": "Port (Single Device Only)"
-        },
-        "description": {
-          "en": "Port number for the device. Default: 80 for HTTP, 443 for HTTPS."
-        },
-        "field": {
-          "number": {
-            "value": 80,
-            "min": 1,
-            "max": 65535
-          }
-        }
-      },
-      {
-        "id": "use_ssl",
-        "label": {
-          "en": "Use HTTPS (Single Device Only)"
-        },
-        "description": {
-          "en": "Enable HTTPS connection. Self-signed certificates are accepted."
-        },
-        "field": {
-          "checkbox": {
-            "value": false
+          "label": {
+            "value": {
+              "en": "Enter the IP address of your Yamaha MusicCast device to set up control."
+            }
           }
         }
       }
     ]
-  },
-  "release_date": "2025-01-03"
+  }
 }
