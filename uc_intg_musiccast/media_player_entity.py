@@ -118,134 +118,142 @@ class MusicCastMediaPlayer(MediaPlayerEntity):
         self.update(attrs)
 
     async def browse(self, options: BrowseOptions) -> BrowseResults | StatusCodes:
-        client = self._device.client
-        if not client:
-            return StatusCodes.SERVICE_UNAVAILABLE
+        media_type = options.media_type or "root"
+        media_id = options.media_id or ""
+        page = options.paging.page if options.paging else 1
+        limit = options.paging.limit if options.paging else 20
 
-        try:
-            media_id = options.media_id or "root"
-            page = options.paging.page if options.paging else 1
-            limit = options.paging.limit if options.paging else 10
-            index = (page - 1) * limit
+        if media_type == "root" or (options.media_id is None and options.media_type is None):
+            return self._browse_root()
 
-            if media_id == "root":
-                return self._build_root_menu(page, limit)
+        if media_type == "sources":
+            return self._browse_sources(page, limit)
 
-            if media_id.startswith("input:"):
-                input_source = media_id.split(":", 1)[1]
-                data = await client.get_list_info(
-                    input_source=input_source, size=limit, index=index
-                )
-                return self._build_list_results(data, media_id, page, limit)
+        if media_type == "presets":
+            return self._browse_presets(page, limit)
 
-            if media_id.startswith("list:"):
-                parts = media_id.split(":", 2)
-                list_id = parts[1] if len(parts) > 1 else "main"
-                data = await client.get_list_info(
-                    list_id=list_id, size=limit, index=index
-                )
-                return self._build_list_results(data, media_id, page, limit)
+        if media_type == "sound_programs":
+            return self._browse_sound_programs()
 
-            if media_id.startswith("presets"):
-                return self._build_presets_menu(page, limit)
+        return StatusCodes.NOT_FOUND
 
-            return StatusCodes.NOT_FOUND
-
-        except Exception as err:
-            _LOG.error("[%s] Browse failed: %s", self.id, err)
-            return StatusCodes.SERVER_ERROR
-
-    def _build_root_menu(self, page: int, limit: int) -> BrowseResults:
-        items = []
-        browsable_inputs = [
-            src for src in self._device.available_inputs
-            if src.get("play_info_type") in ("netusb", "tuner")
-        ]
-        for src in browsable_inputs:
-            items.append(BrowseMediaItem(
-                media_id=f"input:{src['id']}",
-                title=src["name"],
+    def _browse_root(self) -> BrowseResults:
+        items = [
+            BrowseMediaItem(
+                media_id="sources",
+                title="Sources",
+                media_type="sources",
                 media_class=MediaClass.DIRECTORY,
                 can_browse=True,
                 can_play=False,
-                thumbnail=f"icon://uc:music",
+                thumbnail="icon://uc:music",
+            ),
+            BrowseMediaItem(
+                media_id="presets",
+                title="Presets / Favorites",
+                media_type="presets",
+                media_class=MediaClass.DIRECTORY,
+                can_browse=True,
+                can_play=False,
+                thumbnail="icon://uc:radio",
+            ),
+        ]
+        if self._device.available_sound_programs:
+            items.append(BrowseMediaItem(
+                media_id="sound_programs",
+                title="Sound Programs",
+                media_type="sound_programs",
+                media_class=MediaClass.DIRECTORY,
+                can_browse=True,
+                can_play=False,
+                thumbnail="icon://uc:equalizer",
             ))
-        items.append(BrowseMediaItem(
-            media_id="presets",
-            title="Presets / Favorites",
-            media_class=MediaClass.PLAYLIST,
-            can_browse=True,
-            can_play=False,
-            thumbnail="icon://uc:radio",
-        ))
         return BrowseResults(
             media=BrowseMediaItem(
                 media_id="root",
                 title="MusicCast",
+                media_type="root",
                 media_class=MediaClass.DIRECTORY,
                 can_browse=True,
-                items=items[: limit],
+                items=items,
             ),
-            pagination=Pagination(page=page, limit=limit, count=len(items)),
+            pagination=Pagination(page=1, limit=len(items), count=len(items)),
         )
 
-    def _build_presets_menu(self, page: int, limit: int) -> BrowseResults:
+    def _browse_sources(self, page: int, limit: int) -> BrowseResults:
+        all_sources = self._device.available_inputs
+        start = (page - 1) * limit
+        page_sources = all_sources[start: start + limit]
         items = []
-        for i in range(1, 41):
-            name = self._device.preset_names[i - 1]
+        for src in page_sources:
             items.append(BrowseMediaItem(
+                media_id=f"source:{src['id']}",
+                title=src["name"],
+                media_type="source",
+                media_class=MediaClass.CHANNEL,
+                can_browse=False,
+                can_play=True,
+            ))
+        return BrowseResults(
+            media=BrowseMediaItem(
+                media_id="sources",
+                title="Sources",
+                media_type="sources",
+                media_class=MediaClass.DIRECTORY,
+                can_browse=True,
+                items=items,
+            ),
+            pagination=Pagination(page=page, limit=limit, count=len(all_sources)),
+        )
+
+    def _browse_presets(self, page: int, limit: int) -> BrowseResults:
+        all_presets = []
+        for i in range(1, 41):
+            all_presets.append(BrowseMediaItem(
                 media_id=f"preset:{i}",
-                title=name,
+                title=self._device.preset_names[i - 1],
+                media_type="preset",
                 media_class=MediaClass.RADIO,
                 can_browse=False,
                 can_play=True,
             ))
         start = (page - 1) * limit
-        page_items = items[start: start + limit]
+        page_items = all_presets[start: start + limit]
         return BrowseResults(
             media=BrowseMediaItem(
                 media_id="presets",
                 title="Presets / Favorites",
-                media_class=MediaClass.PLAYLIST,
+                media_type="presets",
+                media_class=MediaClass.DIRECTORY,
                 can_browse=True,
                 items=page_items,
             ),
-            pagination=Pagination(page=page, limit=limit, count=len(items)),
+            pagination=Pagination(page=page, limit=limit, count=len(all_presets)),
         )
 
-    def _build_list_results(
-        self, data: dict, parent_id: str, page: int, limit: int
-    ) -> BrowseResults:
+    def _browse_sound_programs(self) -> BrowseResults:
         items = []
-        menu_name = data.get("menu_name", "Browse")
-        list_info = data.get("list_info", [])
-        total = data.get("menu_layer_count", len(list_info))
-
-        for item in list_info:
-            if not isinstance(item, dict):
-                continue
-            text = item.get("text", "").strip()
-            attr = item.get("attribute", 0)
-            if not text:
-                continue
-            is_container = attr == 1
+        for program_id in self._device.available_sound_programs:
+            from uc_intg_musiccast.const import SOUND_MODE_MAPPING
+            name = SOUND_MODE_MAPPING.get(program_id, program_id.replace("_", " ").title())
             items.append(BrowseMediaItem(
-                media_id=f"list:{text}",
-                title=text,
-                media_class=MediaClass.DIRECTORY if is_container else MediaClass.TRACK,
-                can_browse=is_container,
-                can_play=not is_container,
+                media_id=f"program:{program_id}",
+                title=name,
+                media_type="sound_program",
+                media_class=MediaClass.MUSIC,
+                can_browse=False,
+                can_play=True,
             ))
-
         return BrowseResults(
             media=BrowseMediaItem(
-                media_id=parent_id,
-                title=menu_name,
+                media_id="sound_programs",
+                title="Sound Programs",
+                media_type="sound_programs",
                 media_class=MediaClass.DIRECTORY,
                 can_browse=True,
                 items=items,
             ),
-            pagination=Pagination(page=page, limit=limit, count=total),
+            pagination=Pagination(page=1, limit=len(items), count=len(items)),
         )
 
     async def _handle_command(
@@ -300,9 +308,16 @@ class MusicCastMediaPlayer(MediaPlayerEntity):
                 case media_player.Commands.PLAY_MEDIA:
                     if params and "media_id" in params:
                         media_id = params["media_id"]
-                        if media_id.startswith("preset:"):
+                        media_type = params.get("media_type", "")
+                        if media_type == "preset" and media_id.startswith("preset:"):
                             num = int(media_id.split(":")[1])
                             await self._device.recall_preset(num)
+                        elif media_type == "source" and media_id.startswith("source:"):
+                            input_id = media_id.split(":", 1)[1]
+                            await self._device.set_input(input_id)
+                        elif media_type == "sound_program" and media_id.startswith("program:"):
+                            program_id = media_id.split(":", 1)[1]
+                            await self._device.set_sound_program(program_id)
                         else:
                             return StatusCodes.BAD_REQUEST
                 case _:
