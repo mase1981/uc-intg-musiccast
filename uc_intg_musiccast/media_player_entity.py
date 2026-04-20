@@ -107,7 +107,8 @@ class MusicCastMediaPlayer(MediaPlayerEntity):
             attrs[media_player.Attributes.MEDIA_IMAGE_URL] = self._device.albumart_url
             attrs[media_player.Attributes.MEDIA_DURATION] = self._device.total_time
             attrs[media_player.Attributes.MEDIA_POSITION] = self._device.play_time
-            attrs[media_player.Attributes.REPEAT] = self._device.repeat
+            repeat_map = {"off": "OFF", "one": "ONE", "all": "ALL"}
+            attrs[media_player.Attributes.REPEAT] = repeat_map.get(self._device.repeat, "OFF")
             attrs[media_player.Attributes.SHUFFLE] = self._device.shuffle
         else:
             attrs[media_player.Attributes.MEDIA_TITLE] = ""
@@ -125,15 +126,14 @@ class MusicCastMediaPlayer(MediaPlayerEntity):
 
         if media_type == "root" or (options.media_id is None and options.media_type is None):
             return self._browse_root()
-
         if media_type == "sources":
             return self._browse_sources(page, limit)
-
         if media_type == "presets":
             return self._browse_presets(page, limit)
-
         if media_type == "sound_programs":
             return self._browse_sound_programs()
+        if media_type == "netusb":
+            return await self._browse_netusb(media_id, page)
 
         return StatusCodes.NOT_FOUND
 
@@ -186,14 +186,25 @@ class MusicCastMediaPlayer(MediaPlayerEntity):
         page_sources = all_sources[start: start + limit]
         items = []
         for src in page_sources:
-            items.append(BrowseMediaItem(
-                media_id=f"source:{src['id']}",
-                title=src["name"],
-                media_type="source",
-                media_class=MediaClass.CHANNEL,
-                can_browse=False,
-                can_play=True,
-            ))
+            is_netusb = src.get("play_info_type") == "netusb"
+            if is_netusb:
+                items.append(BrowseMediaItem(
+                    media_id=f"netusb:{src['id']}",
+                    title=src["name"],
+                    media_type="netusb",
+                    media_class=MediaClass.DIRECTORY,
+                    can_browse=True,
+                    can_play=True,
+                ))
+            else:
+                items.append(BrowseMediaItem(
+                    media_id=f"source:{src['id']}",
+                    title=src["name"],
+                    media_type="source",
+                    media_class=MediaClass.CHANNEL,
+                    can_browse=False,
+                    can_play=True,
+                ))
         return BrowseResults(
             media=BrowseMediaItem(
                 media_id="sources",
@@ -204,6 +215,62 @@ class MusicCastMediaPlayer(MediaPlayerEntity):
                 items=items,
             ),
             pagination=Pagination(page=page, limit=limit, count=len(all_sources)),
+        )
+
+    async def _browse_netusb(self, media_id: str, page: int) -> BrowseResults | StatusCodes:
+        parts = media_id.split(":")
+        if len(parts) < 2:
+            return StatusCodes.BAD_REQUEST
+
+        source = parts[1]
+        path = [int(p) for p in parts[2:]] if len(parts) > 2 else []
+
+        start_index = (page - 1) * 8
+        result = await self._device.browse_netusb(source, path, index=start_index, size=8)
+        if result is None:
+            return StatusCodes.SERVER_ERROR
+
+        list_items = result.get("list_info", [])
+        menu_name = result.get("menu_name", source.replace("_", " ").title())
+        max_line = result.get("max_line", 0)
+
+        items = []
+        for idx, item in enumerate(list_items):
+            text = item.get("text", "").strip()
+            if not text:
+                continue
+            attr = item.get("attribute", 0)
+            can_browse = attr in (2, 3)
+            can_play = attr in (1, 3)
+
+            absolute_idx = start_index + idx
+            item_path = ":".join(str(p) for p in path + [absolute_idx])
+            item_media_id = f"netusb:{source}:{item_path}"
+
+            thumbnail = item.get("thumbnail", "") or item.get("logo", "")
+            if thumbnail and thumbnail.startswith("/"):
+                thumbnail = f"http://{self._device.address}{thumbnail}"
+
+            items.append(BrowseMediaItem(
+                media_id=item_media_id,
+                title=text,
+                media_type="netusb",
+                media_class=MediaClass.DIRECTORY if can_browse else MediaClass.MUSIC,
+                can_browse=can_browse,
+                can_play=can_play,
+                thumbnail=thumbnail,
+            ))
+
+        return BrowseResults(
+            media=BrowseMediaItem(
+                media_id=media_id,
+                title=menu_name or source.replace("_", " ").title(),
+                media_type="netusb",
+                media_class=MediaClass.DIRECTORY,
+                can_browse=True,
+                items=items,
+            ),
+            pagination=Pagination(page=page, limit=8, count=max_line),
         )
 
     def _browse_presets(self, page: int, limit: int) -> BrowseResults:
@@ -268,7 +335,7 @@ class MusicCastMediaPlayer(MediaPlayerEntity):
                 case media_player.Commands.TOGGLE:
                     await self._device.set_power("toggle")
                 case media_player.Commands.PLAY_PAUSE:
-                    await self._device.set_playback("play_pause")
+                    await self._device.play_pause()
                 case media_player.Commands.STOP:
                     await self._device.set_playback("stop")
                 case media_player.Commands.NEXT:
@@ -285,12 +352,13 @@ class MusicCastMediaPlayer(MediaPlayerEntity):
                 case media_player.Commands.MUTE_TOGGLE:
                     await self._device.set_mute(not self._device.muted)
                 case media_player.Commands.REPEAT:
-                    if params and "repeat" in params:
-                        repeat_map = {"OFF": "off", "ONE": "one", "ALL": "all"}
-                        await self._device.set_repeat(repeat_map.get(params["repeat"], "off"))
+                    await self._device.toggle_repeat()
+                    await self._device._update_state()
+                    self._device.push_update()
                 case media_player.Commands.SHUFFLE:
-                    if params and "shuffle" in params:
-                        await self._device.set_shuffle("on" if params["shuffle"] else "off")
+                    await self._device.toggle_shuffle()
+                    await self._device._update_state()
+                    self._device.push_update()
                 case media_player.Commands.SELECT_SOURCE:
                     if params and "source" in params:
                         source_id = self._device.get_input_id_by_name(params["source"])
@@ -318,6 +386,16 @@ class MusicCastMediaPlayer(MediaPlayerEntity):
                         elif media_type == "sound_program" and media_id.startswith("program:"):
                             program_id = media_id.split(":", 1)[1]
                             await self._device.set_sound_program(program_id)
+                        elif media_type == "netusb" and media_id.startswith("netusb:"):
+                            parts = media_id.split(":")
+                            source = parts[1]
+                            indices = [int(p) for p in parts[2:]] if len(parts) > 2 else []
+                            if not indices:
+                                await self._device.set_input(source)
+                            else:
+                                path = indices[:-1]
+                                item_index = indices[-1]
+                                await self._device.play_netusb_item(source, path, item_index)
                         else:
                             return StatusCodes.BAD_REQUEST
                 case _:

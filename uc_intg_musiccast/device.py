@@ -5,6 +5,7 @@ MusicCast device implementation using PollingDevice.
 :license: MPL-2.0, see LICENSE for more details.
 """
 
+import asyncio
 import logging
 from typing import Any
 
@@ -366,6 +367,12 @@ class MusicCastDevice(PollingDevice):
     async def set_playback(self, playback: str) -> None:
         await self._client.set_playback(playback)
 
+    async def play_pause(self) -> None:
+        if self._playback == "play":
+            await self._client.set_playback("pause")
+        else:
+            await self._client.set_playback("play")
+
     async def set_repeat(self, repeat: str) -> None:
         await self._client.set_repeat(repeat)
 
@@ -388,6 +395,26 @@ class MusicCastDevice(PollingDevice):
 
     async def manage_play(self, action_type: str) -> None:
         await self._client.manage_play(action_type)
+
+    async def browse_netusb(self, source: str, path: list[int], index: int = 0, size: int = 8) -> dict | None:
+        try:
+            await self._client.get_list_info(input_source=source, index=0, size=8)
+            for step in path:
+                await self._client.set_list_control(control_type="select", index=step)
+                await asyncio.sleep(0.3)
+                await self._client.get_list_info(index=0, size=8)
+            return await self._client.get_list_info(index=index, size=size)
+        except Exception as err:
+            _LOG.error("[%s] Netusb browse failed: %s", self.log_id, err)
+            return None
+
+    async def play_netusb_item(self, source: str, path: list[int], item_index: int) -> None:
+        await self._client.get_list_info(input_source=source, index=0, size=8)
+        for step in path:
+            await self._client.set_list_control(control_type="select", index=step)
+            await asyncio.sleep(0.3)
+            await self._client.get_list_info(index=0, size=8)
+        await self._client.set_list_control(control_type="play", index=item_index)
 
     @staticmethod
     def _parse_preset_info(data: dict) -> dict[int, str]:
