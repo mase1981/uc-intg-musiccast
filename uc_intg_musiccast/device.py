@@ -56,6 +56,8 @@ class MusicCastDevice(PollingDevice):
         self._available_sound_programs: list[str] = []
         self._scene_support: bool = False
         self._model_name: str = "MusicCast"
+        self._preset_info: dict[int, str] = {}
+        self._current_preset_name: str = ""
 
     @property
     def identifier(self) -> str:
@@ -174,6 +176,32 @@ class MusicCastDevice(PollingDevice):
     def model_name(self) -> str:
         return self._model_name
 
+    @property
+    def preset_names(self) -> list[str]:
+        names = []
+        for i in range(1, 41):
+            name = self._preset_info.get(i, "")
+            if name:
+                names.append(name)
+            else:
+                names.append(f"Preset {i}")
+        return names
+
+    @property
+    def current_preset_name(self) -> str:
+        return self._current_preset_name
+
+    def get_preset_num_by_name(self, name: str) -> int | None:
+        for num, preset_name in self._preset_info.items():
+            if preset_name == name:
+                return num
+        if name.startswith("Preset "):
+            try:
+                return int(name.split(" ")[1])
+            except (ValueError, IndexError):
+                pass
+        return None
+
     async def establish_connection(self) -> YamahaMusicCastClient:
         self._client = YamahaMusicCastClient(
             self._device_config.address,
@@ -198,6 +226,14 @@ class MusicCastDevice(PollingDevice):
             )
         except Exception as err:
             _LOG.warning("[%s] Could not fetch capabilities: %s", self.log_id, err)
+
+        try:
+            preset_data = await self._client.get_preset_info()
+            self._preset_info = self._parse_preset_info(preset_data)
+            named = sum(1 for n in self._preset_info.values() if n)
+            _LOG.info("[%s] %d named presets found", self.log_id, named)
+        except Exception as err:
+            _LOG.warning("[%s] Could not fetch presets: %s", self.log_id, err)
 
         try:
             await self._update_state()
@@ -344,12 +380,40 @@ class MusicCastDevice(PollingDevice):
 
     async def recall_preset(self, num: int) -> None:
         await self._client.recall_preset(num=num)
+        name = self._preset_info.get(num, f"Preset {num}")
+        self._current_preset_name = name
 
     async def recall_scene(self, num: int) -> None:
         await self._client.recall_scene(num=num)
 
     async def manage_play(self, action_type: str) -> None:
         await self._client.manage_play(action_type)
+
+    @staticmethod
+    def _parse_preset_info(data: dict) -> dict[int, str]:
+        presets: dict[int, str] = {}
+        preset_info = data.get("preset_info", [])
+        for band_list in preset_info:
+            if not isinstance(band_list, list):
+                continue
+            for item in band_list:
+                if not isinstance(item, dict):
+                    continue
+                text = item.get("text", "").strip()
+                num = item.get("number", 0)
+                if num and text:
+                    presets[num] = text
+        if not presets:
+            for key, value in data.items():
+                if key == "response_code":
+                    continue
+                if isinstance(value, list):
+                    for idx, item in enumerate(value):
+                        if isinstance(item, dict):
+                            text = item.get("text", "").strip()
+                            if text:
+                                presets[idx + 1] = text
+        return presets
 
     def get_input_id_by_name(self, name: str) -> str | None:
         return next(
