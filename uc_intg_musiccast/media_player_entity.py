@@ -247,7 +247,7 @@ class MusicCastMediaPlayer(MediaPlayerEntity):
             item_path = ":".join(str(p) for p in path + [absolute_idx])
             item_media_id = f"netusb:{source}:{item_path}"
 
-            thumbnail = item.get("thumbnail", "") or item.get("logo", "")
+            thumbnail = item.get("thumbnail", "") or item.get("logo", "") or None
             if thumbnail and thumbnail.startswith("/"):
                 thumbnail = f"http://{self._device.address}{thumbnail}"
 
