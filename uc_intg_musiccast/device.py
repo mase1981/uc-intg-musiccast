@@ -396,14 +396,25 @@ class MusicCastDevice(PollingDevice):
     async def manage_play(self, action_type: str) -> None:
         await self._client.manage_play(action_type)
 
+    async def _navigate_to_root(self, source: str) -> dict:
+        result = await self._client.get_list_info(input_source=source, index=0, size=8)
+        menu_layer = result.get("menu_layer", 0)
+        while menu_layer > 0:
+            await self._client.set_list_control(control_type="return")
+            await asyncio.sleep(0.3)
+            result = await self._client.get_list_info(input_source=source, index=0, size=8)
+            new_layer = result.get("menu_layer", 0)
+            if new_layer >= menu_layer:
+                break
+            menu_layer = new_layer
+        return result
+
     async def browse_netusb(self, source: str, path: list[int], index: int = 0, size: int = 8) -> dict | None:
         try:
-            result = await self._client.get_list_info(
-                input_source=source,
-                index=index if not path else 0,
-                size=size if not path else 8,
-            )
+            result = await self._navigate_to_root(source)
             if not path:
+                if index != 0 or size != 8:
+                    result = await self._client.get_list_info(input_source=source, index=index, size=size)
                 return result
 
             for step in path:
@@ -420,7 +431,7 @@ class MusicCastDevice(PollingDevice):
             return None
 
     async def play_netusb_item(self, source: str, path: list[int], item_index: int) -> None:
-        await self._client.get_list_info(input_source=source, index=0, size=8)
+        await self._navigate_to_root(source)
         for step in path:
             await self._client.set_list_control(control_type="select", index=step)
             await asyncio.sleep(0.5)

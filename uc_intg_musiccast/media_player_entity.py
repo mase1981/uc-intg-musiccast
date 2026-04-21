@@ -241,7 +241,9 @@ class MusicCastMediaPlayer(MediaPlayerEntity):
                 continue
             attr = item.get("attribute", 0)
             can_browse = attr in (2, 3)
-            can_play = attr in (1, 3)
+            can_play = attr != 2
+            _LOG.debug("Browse item: text=%s, attribute=%s, can_browse=%s, can_play=%s",
+                       text, attr, can_browse, can_play)
 
             absolute_idx = start_index + idx
             item_path = ":".join(str(p) for p in path + [absolute_idx])
