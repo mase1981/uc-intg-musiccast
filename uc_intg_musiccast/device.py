@@ -398,12 +398,23 @@ class MusicCastDevice(PollingDevice):
 
     async def browse_netusb(self, source: str, path: list[int], index: int = 0, size: int = 8) -> dict | None:
         try:
-            await self._client.get_list_info(input_source=source, index=0, size=8)
+            result = await self._client.get_list_info(
+                input_source=source,
+                index=index if not path else 0,
+                size=size if not path else 8,
+            )
+            if not path:
+                return result
+
             for step in path:
                 await self._client.set_list_control(control_type="select", index=step)
-                await asyncio.sleep(0.3)
-                await self._client.get_list_info(index=0, size=8)
-            return await self._client.get_list_info(index=index, size=size)
+                await asyncio.sleep(0.5)
+                result = await self._client.get_list_info(input_source=source, index=0, size=8)
+
+            if index != 0 or size != 8:
+                result = await self._client.get_list_info(input_source=source, index=index, size=size)
+
+            return result
         except Exception as err:
             _LOG.error("[%s] Netusb browse failed: %s", self.log_id, err)
             return None
@@ -412,8 +423,8 @@ class MusicCastDevice(PollingDevice):
         await self._client.get_list_info(input_source=source, index=0, size=8)
         for step in path:
             await self._client.set_list_control(control_type="select", index=step)
-            await asyncio.sleep(0.3)
-            await self._client.get_list_info(index=0, size=8)
+            await asyncio.sleep(0.5)
+            await self._client.get_list_info(input_source=source, index=0, size=8)
         await self._client.set_list_control(control_type="play", index=item_index)
 
     @staticmethod

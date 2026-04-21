@@ -356,10 +356,10 @@ class YamahaMusicCastClient:
         """Get preset information."""
         return await self._make_request("netusb/getPresetInfo")
 
-    async def get_list_info(self, list_id: str = "main", input_source: Optional[str] = None, 
+    async def get_list_info(self, input_source: Optional[str] = None,
                            size: int = 8, lang: str = "en", index: int = 0) -> Dict[str, Any]:
         """Get list information for browsing content."""
-        params = {"list_id": list_id, "size": size, "lang": lang, "index": index}
+        params = {"size": size, "lang": lang, "index": index}
         if input_source:
             params["input"] = input_source
         return await self._make_request("netusb/getListInfo", params)
