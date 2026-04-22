@@ -241,7 +241,7 @@ class MusicCastMediaPlayer(MediaPlayerEntity):
                 continue
             attr = item.get("attribute", 0)
             can_browse = (attr & 2) != 0
-            can_play = (attr & 5) != 0 or attr == 0
+            can_play = True
             _LOG.debug("Browse item: text=%s, attribute=%s, can_browse=%s, can_play=%s",
                        text, attr, can_browse, can_play)
 
