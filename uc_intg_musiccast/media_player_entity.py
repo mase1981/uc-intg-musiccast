@@ -256,7 +256,7 @@ class MusicCastMediaPlayer(MediaPlayerEntity):
             items.append(BrowseMediaItem(
                 media_id=item_media_id,
                 title=text,
-                media_type="netusb",
+                media_type="netusb_folder" if can_browse else "netusb",
                 media_class=MediaClass.DIRECTORY if can_browse else MediaClass.MUSIC,
                 can_browse=can_browse,
                 can_play=can_play,
@@ -388,12 +388,14 @@ class MusicCastMediaPlayer(MediaPlayerEntity):
                         elif media_type == "sound_program" and media_id.startswith("program:"):
                             program_id = media_id.split(":", 1)[1]
                             await self._device.set_sound_program(program_id)
-                        elif media_type == "netusb" and media_id.startswith("netusb:"):
+                        elif media_type in ("netusb", "netusb_folder") and media_id.startswith("netusb:"):
                             parts = media_id.split(":")
                             source = parts[1]
                             indices = [int(p) for p in parts[2:]] if len(parts) > 2 else []
                             if not indices:
                                 await self._device.set_input(source)
+                            elif media_type == "netusb_folder":
+                                await self._device.play_netusb_folder(source, indices)
                             else:
                                 path = indices[:-1]
                                 item_index = indices[-1]

@@ -1,6 +1,6 @@
 {
   "driver_id": "uc-intg-musiccast",
-  "version": "2.0.10",
+  "version": "2.0.11",
   "min_core_api": "0.22.0",
   "name": {"en": "Yamaha MusicCast"},
   "icon": "custom:musiccast-logo.png",

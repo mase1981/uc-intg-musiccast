@@ -438,6 +438,14 @@ class MusicCastDevice(PollingDevice):
             await self._client.get_list_info(input_source=source, index=0, size=8)
         await self._client.set_list_control(control_type="play", index=item_index)
 
+    async def play_netusb_folder(self, source: str, path: list[int]) -> None:
+        await self._navigate_to_root(source)
+        for step in path:
+            await self._client.set_list_control(control_type="select", index=step)
+            await asyncio.sleep(0.5)
+            await self._client.get_list_info(input_source=source, index=0, size=8)
+        await self._client.set_list_control(control_type="play", index=0)
+
     @staticmethod
     def _parse_preset_info(data: dict) -> dict[int, str]:
         presets: dict[int, str] = {}
