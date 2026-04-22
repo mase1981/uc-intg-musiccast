@@ -132,7 +132,7 @@ class MusicCastMediaPlayer(MediaPlayerEntity):
             return self._browse_presets(page, limit)
         if media_type == "sound_programs":
             return self._browse_sound_programs()
-        if media_type == "netusb":
+        if media_type in ("netusb", "netusb_folder"):
             return await self._browse_netusb(media_id, page)
 
         return StatusCodes.NOT_FOUND
